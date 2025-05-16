@@ -1,0 +1,53 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.4.5'
+	id 'io.spring.dependency-management' version '1.1.7'
+	id 'application'
+}
+
+group = 'org.example'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(17)
+	}
+}
+
+// 메인 클래스 설정
+application {
+	mainClass = 'org.example.consumer.KafkaPaymentLimitConsumer'
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter'
+	implementation 'org.apache.kafka:kafka-clients:3.5.1'
+	implementation 'org.springframework.kafka:spring-kafka'
+	implementation 'org.json:json:20240205'  // JSON 파싱을 위한 의존성
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
+
+// 실행 가능한 JAR 파일 생성 설정
+jar {
+    manifest {
+        attributes(
+            'Main-Class': 'org.example.consumer.KafkaPaymentLimitConsumer'
+        )
+    }
+    
+    // 의존성을 포함한 fat JAR 파일 생성
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
