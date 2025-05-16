@@ -102,18 +102,6 @@ public class KafkaPaymentLimitService {
     
     // 로깅을 위한 헬퍼 메서드
     private void logPaymentData(JSONObject jsonObject) {
-        System.out.println("franchise_id: " + jsonObject.getInt("franchise_id"));
-        System.out.println("store_brand: " + jsonObject.getString("store_brand"));
-        System.out.println("store_id: " + jsonObject.getInt("store_id"));
-        System.out.println("store_name: " + jsonObject.getString("store_name"));
-        System.out.println("region: " + jsonObject.getString("region"));
-        System.out.println("store_address: " + jsonObject.getString("store_address"));
-        System.out.println("total_price: " + jsonObject.getInt("total_price"));
-        System.out.println("user_id: " + jsonObject.getInt("user_id"));
-        System.out.println("time: " + jsonObject.getString("time"));
-        System.out.println("user_name: " + jsonObject.getString("user_name"));
-        System.out.println("user_gender: " + jsonObject.getString("user_gender"));
-        System.out.println("user_age: " + jsonObject.getInt("user_age"));
         System.out.println("alert_message: " + jsonObject.getString("alert_message"));
     }
 
