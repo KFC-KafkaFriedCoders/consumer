@@ -18,6 +18,13 @@ public class WebSocketService {
     public WebSocketService(SimpMessagingTemplate messagingTemplate) {
         this.messagingTemplate = messagingTemplate;
     }
+    
+    /**
+     * Messaging Template 게터
+     */
+    public SimpMessagingTemplate getMessagingTemplate() {
+        return messagingTemplate;
+    }
 
     /**
      * 결제 한도 알림을 WebSocket을 통해 클라이언트에게 전송합니다.

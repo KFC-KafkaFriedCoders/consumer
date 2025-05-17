@@ -28,13 +28,15 @@ public class KafkaSalesTotalService {
     private static final String GROUP_ID = "sales-total-consumer-group";
 
     private final WebSocketService webSocketService;
+    private final BrandFilterService brandFilterService;
     private KafkaConsumer<String, String> consumer;
     private ExecutorService executorService;
     private final AtomicBoolean running = new AtomicBoolean(true);
 
     @Autowired
-    public KafkaSalesTotalService(WebSocketService webSocketService) {
+    public KafkaSalesTotalService(WebSocketService webSocketService, BrandFilterService brandFilterService) {
         this.webSocketService = webSocketService;
+        this.brandFilterService = brandFilterService;
     }
 
     @PostConstruct
@@ -79,8 +81,8 @@ public class KafkaSalesTotalService {
                         System.out.println("판매 데이터 수신: " + jsonObject.toString());
                         logSalesData(jsonObject);
                         
-                        // WebSocket을 통해 클라이언트에게 메시지 전송
-                        webSocketService.sendSalesTotalData(jsonObject);
+                        // WebSocket을 통해 클라이언트에게 메시지 전송 (브랜드 필터링 적용)
+                        brandFilterService.processNewData(jsonObject);
                     } catch (Exception e) {
                         System.err.println("JSON 파싱 오류: " + e.getMessage());
                         System.out.println("원본 값: " + record.value());
@@ -102,11 +104,12 @@ public class KafkaSalesTotalService {
     
     // 로깅을 위한 헬퍼 메서드
     private void logSalesData(JSONObject jsonObject) {
+        /*
         System.out.println("가맹점 ID: " + jsonObject.getInt("franchise_id"));
         System.out.println("브랜드명: " + jsonObject.getString("store_brand"));
         System.out.println("매장 수: " + jsonObject.getInt("store_count"));
         System.out.println("총 매출: " + jsonObject.getLong("total_sales"));
-        System.out.println("업데이트 시간: " + jsonObject.getString("update_time"));
+        System.out.println("업데이트 시간: " + jsonObject.getString("update_time"));*/
     }
 
     @PreDestroy
