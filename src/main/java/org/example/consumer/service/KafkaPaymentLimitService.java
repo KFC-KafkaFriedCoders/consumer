@@ -25,7 +25,7 @@ public class KafkaPaymentLimitService {
     // Kafka 설정
     private static final String BOOTSTRAP_SERVERS = "13.209.157.53:9092,15.164.111.153:9092,3.34.32.69:9092";
     private static final String TOPIC = "payment_limit";
-    private static final String GROUP_ID = "payment-limit-consumer-group33";
+    private static final String GROUP_ID = "payment-limit-consumer-group11";
 
     private final WebSocketService webSocketService;
     private KafkaConsumer<String, String> consumer;
@@ -75,8 +75,6 @@ public class KafkaPaymentLimitService {
                         JSONObject jsonObject = new JSONObject(jsonValue);
 
                         // 콘솔에 로그 출력
-                        System.out.println("== 파싱된 JSON 데이터 ==");
-                        logPaymentData(jsonObject);
                         System.out.println("------------------------------------");
 
                         // WebSocket을 통해 클라이언트에게 메시지 전송
