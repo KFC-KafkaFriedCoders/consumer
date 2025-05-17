@@ -5,6 +5,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -20,12 +21,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
-public class KafkaPaymentLimitService {
+public class KafkaSameUserService {
 
     // Kafka 설정
     private static final String BOOTSTRAP_SERVERS = "13.209.157.53:9092,15.164.111.153:9092,3.34.32.69:9092";
-    private static final String TOPIC = "payment_limit";
-    private static final String GROUP_ID = "payment-limit-consumer-group33";
+    private static final String TOPIC = "payment-same-user";
+    private static final String GROUP_ID = "payment-same-user-consumer-group1";
 
     private final WebSocketService webSocketService;
     private KafkaConsumer<String, String> consumer;
@@ -33,7 +34,7 @@ public class KafkaPaymentLimitService {
     private final AtomicBoolean running = new AtomicBoolean(true);
 
     @Autowired
-    public KafkaPaymentLimitService(WebSocketService webSocketService) {
+    public KafkaSameUserService(WebSocketService webSocketService) {
         this.webSocketService = webSocketService;
     }
 
@@ -51,13 +52,13 @@ public class KafkaPaymentLimitService {
         consumer = new KafkaConsumer<>(properties);
         consumer.subscribe(Collections.singletonList(TOPIC));
 
-        System.out.println("PaymentLimitService 시작 중...");
+        System.out.println("KafkaSameUserService 시작 중...");
         System.out.println("브로커 주소: " + BOOTSTRAP_SERVERS);
         System.out.println("구독 토픽: " + TOPIC);
         System.out.println("컨슈머 그룹 ID: " + GROUP_ID);
         
         // WebSocket으로 서버 시작 상태 전송
-        webSocketService.sendServerStatus("Kafka Consumer 서비스가 시작되었습니다. 토픽: " + TOPIC);
+        webSocketService.sendServerStatus("Kafka Same User Consumer 서비스가 시작되었습니다. 토픽: " + TOPIC);
 
         // 백그라운드 스레드에서 Kafka 메시지 폴링
         executorService = Executors.newSingleThreadExecutor();
@@ -75,12 +76,12 @@ public class KafkaPaymentLimitService {
                         JSONObject jsonObject = new JSONObject(jsonValue);
 
                         // 콘솔에 로그 출력
-                        System.out.println("== 파싱된 JSON 데이터 ==");
-                        logPaymentData(jsonObject);
+                        System.out.println("== 파싱된 동일사용자 결제 데이터 ==");
+                        logSameUserData(jsonObject);
                         System.out.println("------------------------------------");
 
                         // WebSocket을 통해 클라이언트에게 메시지 전송
-                        webSocketService.sendPaymentLimitAlert(jsonObject);
+                        webSocketService.sendSameUserAlert(jsonObject);
                     } catch (Exception e) {
                         System.err.println("JSON 파싱 오류: " + e.getMessage());
                         System.out.println("원본 값: " + record.value());
@@ -92,7 +93,7 @@ public class KafkaPaymentLimitService {
             e.printStackTrace();
             
             // WebSocket으로 오류 상태 전송
-            webSocketService.sendServerStatus("Kafka Consumer 오류 발생: " + e.getMessage());
+            webSocketService.sendServerStatus("Kafka Same User Consumer 오류 발생: " + e.getMessage());
         } finally {
             if (consumer != null) {
                 consumer.close();
@@ -101,8 +102,18 @@ public class KafkaPaymentLimitService {
     }
     
     // 로깅을 위한 헬퍼 메서드
-    private void logPaymentData(JSONObject jsonObject) {
-        System.out.println("alert_message: " + jsonObject.getString("alert_message"));
+    private void logSameUserData(JSONObject jsonObject) {
+        System.out.println("userId: " + jsonObject.getString("userId"));
+        System.out.println("userName: " + jsonObject.getString("userName"));
+        System.out.println("alertMessage: " + jsonObject.getString("alertMessage"));
+        System.out.println("detectionTime: " + jsonObject.getString("detectionTime"));
+        
+        // duplicateStores 배열 정보 출력
+        JSONArray stores = jsonObject.getJSONArray("duplicateStores");
+        System.out.println("의심 매장 목록:");
+        for (int i = 0; i < stores.length(); i++) {
+            System.out.println("  - " + stores.getString(i));
+        }
     }
 
     @PreDestroy
@@ -116,7 +127,7 @@ public class KafkaPaymentLimitService {
         }
         
         // WebSocket으로 서버 종료 상태 전송
-        webSocketService.sendServerStatus("Kafka Consumer 서비스가 종료되었습니다.");
-        System.out.println("KafkaPaymentLimitService 중지됨");
+        webSocketService.sendServerStatus("Kafka Same User Consumer 서비스가 종료되었습니다.");
+        System.out.println("KafkaSameUserService 중지됨");
     }
 }

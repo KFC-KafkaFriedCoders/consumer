@@ -37,6 +37,23 @@ public class WebSocketService {
     }
     
     /**
+     * 동일 사용자 결제 알림을 WebSocket을 통해 클라이언트에게 전송합니다.
+     * 
+     * @param sameUserData 동일 사용자 결제 데이터를 담은 JSON 객체
+     */
+    public void sendSameUserAlert(JSONObject sameUserData) {
+        // 서버 수신 시간 추가
+        sameUserData.put("server_received_time", LocalDateTime.now().format(formatter));
+        
+        // 이벤트 타입 추가 (React 클라이언트에서 이벤트 타입별 처리를 위함)
+        sameUserData.put("event_type", "payment_same_user_alert");
+        
+        // 메시지 전송
+        messagingTemplate.convertAndSend("/topic/payment-same-user", sameUserData.toString());
+        System.out.println("WebSocket으로 동일 사용자 결제 알림 전송: " + sameUserData.toString());
+    }
+    
+    /**
      * 서버 상태 메시지를 클라이언트에게 전송합니다.
      */
     public void sendServerStatus(String status) {

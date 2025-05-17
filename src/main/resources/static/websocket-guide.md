@@ -1,3 +1,19 @@
+    // 동일 사용자 알림 구독
+    const unsubscribeSameUser = webSocketService.subscribeToSameUserAlerts(data => {
+      // 새로운 동일 사용자 결제 알림 처리
+      const alertSound = new Audio('/alert-sound.mp3');
+      alertSound.play();
+      
+      setSameUserAlerts(prev => [data, ...prev].slice(0, 50)); // 최근 50개 알림만 유지
+    });
+  // 클라이언트 예제 - 동일 사용자 알림 처리
+  const unsubscribeSameUser = webSocketService.subscribeToSameUserAlerts(data => {
+    // 새로운 동일 사용자 결제 알림 처리
+    const alertSound = new Audio('/alert-sound.mp3');
+    alertSound.play();
+    
+    setSameUserAlerts(prev => [data, ...prev].slice(0, 50)); // 최근 50개 알림만 유지
+  });
 # 웹소켓 연결 가이드 (React 애플리케이션용)
 
 이 문서는 React 애플리케이션에서 Spring Boot WebSocket 서버에 연결하는 방법을 안내합니다.
@@ -13,8 +29,17 @@
 1. **결제 한도 알림 토픽**: `/topic/payment-limit`
    - 결제 한도 관련 이벤트가 발생할 때 메시지 수신
 
-2. **서버 상태 토픽**: `/topic/server-status`
+2. **동일 사용자 결제 알림 토픽**: `/topic/payment-same-user`
+   - 동일 사용자의 다중 결제 발생 시 메시지 수신
+
+3. **서버 상태 토픽**: `/topic/server-status`
    - 서버 시작/종료 등 상태 변경 시 메시지 수신
+
+4. **결제 데이터 요청 상태 토픽**: `/topic/payment-status`
+   - 결제 데이터 요청에 대한 응답
+
+5. **동일 사용자 데이터 요청 상태 토픽**: `/topic/same-user-status`
+   - 동일 사용자 결제 데이터 요청에 대한 응답
 
 ## 클라이언트 측 구현 예시 (React)
 
@@ -34,6 +59,7 @@ class WebSocketService {
     this.connected = false;
     this.subscribers = {
       paymentLimit: [],
+      sameUser: [],
       serverStatus: []
     };
   }
@@ -54,6 +80,12 @@ class WebSocketService {
           this.stompClient.subscribe('/topic/payment-limit', message => {
             const data = JSON.parse(message.body);
             this.subscribers.paymentLimit.forEach(callback => callback(data));
+          });
+          
+          // 동일 사용자 결제 알림 구독
+          this.stompClient.subscribe('/topic/payment-same-user', message => {
+            const data = JSON.parse(message.body);
+            this.subscribers.sameUser.forEach(callback => callback(data));
           });
           
           // 서버 상태 구독
@@ -87,6 +119,14 @@ class WebSocketService {
     this.subscribers.paymentLimit.push(callback);
     return () => {
       this.subscribers.paymentLimit = this.subscribers.paymentLimit.filter(cb => cb !== callback);
+    };
+  }
+
+  // 동일 사용자 결제 알림 구독
+  subscribeToSameUserAlerts(callback) {
+    this.subscribers.sameUser.push(callback);
+    return () => {
+      this.subscribers.sameUser = this.subscribers.sameUser.filter(cb => cb !== callback);
     };
   }
 
@@ -220,6 +260,23 @@ export default PaymentAlertDashboard;
   "server_received_time": "2025-05-16 14:30:46",
   "event_type": "payment_limit_alert"
 }
+```
+
+### 동일 사용자 결제 알림 메시지 (/topic/payment-same-user)
+
+```json
+{
+  "userId": "1169",
+  "userName": "장유",
+  "userGender": "남성",
+  "userAge": 27,
+  "duplicateStores": ["홍콩반점0410 영종도운서역점", "역전우동0410 안산고잔남부점"],
+  "alertMessage": "결제자: 장유 (1169), 의심스러운 결제가 탐지되었습니다: 홍콩반점0410 영종도운서역점, 역전우동0410 안산고잔남부점",
+  "detectionTime": "2025-05-17 13:09:30",
+  "server_received_time": "2025-05-17 13:09:32",
+  "event_type": "payment_same_user_alert"
+}
+```
 ```
 
 ### 서버 상태 메시지 (/topic/server-status)
