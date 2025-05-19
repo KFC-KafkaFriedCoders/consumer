@@ -29,13 +29,15 @@ public class KafkaSameUserService {
     private static final String GROUP_ID = "payment-same-user-consumer-group16";
 
     private final WebSocketService webSocketService;
+    private final BrandDataManager brandDataManager;
     private KafkaConsumer<String, String> consumer;
     private ExecutorService executorService;
     private final AtomicBoolean running = new AtomicBoolean(true);
 
     @Autowired
-    public KafkaSameUserService(WebSocketService webSocketService) {
+    public KafkaSameUserService(WebSocketService webSocketService, BrandDataManager brandDataManager) {
         this.webSocketService = webSocketService;
+        this.brandDataManager = brandDataManager;
     }
 
     @PostConstruct
@@ -77,9 +79,21 @@ public class KafkaSameUserService {
 
                         // 콘솔에 로그 출력
                         System.out.println("------------------------------------");
+                        System.out.println("동일인 결제 알림 수신: " + jsonObject.toString());
 
-                        // WebSocket을 통해 클라이언트에게 메시지 전송
+                        // WebSocket을 통해 클라이언트에게 메시지 전송 (브랜드별 저장 포함)
                         webSocketService.sendSameUserAlert(jsonObject);
+                        
+                        // 브랜드 정보 로깅
+                        String brand = jsonObject.optString("store_brand", "Unknown");
+                        if (brandDataManager.isValidBrand(brand)) {
+                            System.out.println("브랜드 '" + brand + "'의 동일인 결제 데이터 저장 완료");
+                        } else {
+                            System.out.println("알 수 없는 브랜드: " + brand);
+                        }
+                        
+                        // 상세 정보 로깅
+                        logSameUserData(jsonObject);
                     } catch (Exception e) {
                         System.err.println("JSON 파싱 오류: " + e.getMessage());
                         System.out.println("원본 값: " + record.value());
@@ -101,16 +115,30 @@ public class KafkaSameUserService {
     
     // 로깅을 위한 헬퍼 메서드
     private void logSameUserData(JSONObject jsonObject) {
-        System.out.println("userId: " + jsonObject.getString("userId"));
-        System.out.println("userName: " + jsonObject.getString("userName"));
-        System.out.println("alertMessage: " + jsonObject.getString("alertMessage"));
-        System.out.println("detectionTime: " + jsonObject.getString("detectionTime"));
-        
-        // duplicateStores 배열 정보 출력
-        JSONArray stores = jsonObject.getJSONArray("duplicateStores");
-        System.out.println("의심 매장 목록:");
-        for (int i = 0; i < stores.length(); i++) {
-            System.out.println("  - " + stores.getString(i));
+        try {
+            if (jsonObject.has("userId")) {
+                System.out.println("userId: " + jsonObject.getString("userId"));
+            }
+            if (jsonObject.has("userName")) {
+                System.out.println("userName: " + jsonObject.getString("userName"));
+            }
+            if (jsonObject.has("alertMessage")) {
+                System.out.println("alertMessage: " + jsonObject.getString("alertMessage"));
+            }
+            if (jsonObject.has("detectionTime")) {
+                System.out.println("detectionTime: " + jsonObject.getString("detectionTime"));
+            }
+            
+            // duplicateStores 배열 정보 출력
+            if (jsonObject.has("duplicateStores")) {
+                JSONArray stores = jsonObject.getJSONArray("duplicateStores");
+                System.out.println("의심 매장 목록:");
+                for (int i = 0; i < stores.length(); i++) {
+                    System.out.println("  - " + stores.getString(i));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("로깅 중 오류: " + e.getMessage());
         }
     }
 

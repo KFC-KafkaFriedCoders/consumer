@@ -28,14 +28,18 @@ public class KafkaSalesTotalService {
     private static final String GROUP_ID = "sales-total-consumer-group";
 
     private final WebSocketService webSocketService;
+    private final BrandDataManager brandDataManager;
     private final BrandFilterService brandFilterService;
     private KafkaConsumer<String, String> consumer;
     private ExecutorService executorService;
     private final AtomicBoolean running = new AtomicBoolean(true);
 
     @Autowired
-    public KafkaSalesTotalService(WebSocketService webSocketService, BrandFilterService brandFilterService) {
+    public KafkaSalesTotalService(WebSocketService webSocketService, 
+                                  BrandDataManager brandDataManager,
+                                  BrandFilterService brandFilterService) {
         this.webSocketService = webSocketService;
+        this.brandDataManager = brandDataManager;
         this.brandFilterService = brandFilterService;
     }
 
@@ -78,10 +82,22 @@ public class KafkaSalesTotalService {
 
                         // 콘솔에 로그 출력
                         System.out.println("------------------------------------");
-                        System.out.println("판매 데이터 수신: " + jsonObject.toString());
+                        System.out.println("매출 총합 데이터 수신: " + jsonObject.toString());
+                        
+                        // 브랜드 정보 로깅
+                        String brand = jsonObject.optString("store_brand", "Unknown");
+                        if (brandDataManager.isValidBrand(brand)) {
+                            System.out.println("브랜드 '" + brand + "'의 매출 총합 데이터 저장 완료");
+                        } else {
+                            System.out.println("알 수 없는 브랜드: " + brand);
+                        }
+                        
                         logSalesData(jsonObject);
                         
-                        // WebSocket을 통해 클라이언트에게 메시지 전송 (브랜드 필터링 적용)
+                        // WebSocket을 통해 클라이언트에게 메시지 전송 (브랜드별 저장 포함)
+                        webSocketService.sendSalesTotalData(jsonObject);
+                        
+                        // 기존 브랜드 필터링 서비스도 유지 (호환성을 위해)
                         brandFilterService.processNewData(jsonObject);
                     } catch (Exception e) {
                         System.err.println("JSON 파싱 오류: " + e.getMessage());
@@ -104,12 +120,25 @@ public class KafkaSalesTotalService {
     
     // 로깅을 위한 헬퍼 메서드
     private void logSalesData(JSONObject jsonObject) {
-        /*
-        System.out.println("가맹점 ID: " + jsonObject.getInt("franchise_id"));
-        System.out.println("브랜드명: " + jsonObject.getString("store_brand"));
-        System.out.println("매장 수: " + jsonObject.getInt("store_count"));
-        System.out.println("총 매출: " + jsonObject.getLong("total_sales"));
-        System.out.println("업데이트 시간: " + jsonObject.getString("update_time"));*/
+        try {
+            if (jsonObject.has("franchise_id")) {
+                System.out.println("가맹점 ID: " + jsonObject.getInt("franchise_id"));
+            }
+            if (jsonObject.has("store_brand")) {
+                System.out.println("브랜드명: " + jsonObject.getString("store_brand"));
+            }
+            if (jsonObject.has("store_count")) {
+                System.out.println("매장 수: " + jsonObject.getInt("store_count"));
+            }
+            if (jsonObject.has("total_sales")) {
+                System.out.println("총 매출: " + jsonObject.getLong("total_sales"));
+            }
+            if (jsonObject.has("update_time")) {
+                System.out.println("업데이트 시간: " + jsonObject.getString("update_time"));
+            }
+        } catch (Exception e) {
+            System.err.println("로깅 중 오류: " + e.getMessage());
+        }
     }
 
     @PreDestroy

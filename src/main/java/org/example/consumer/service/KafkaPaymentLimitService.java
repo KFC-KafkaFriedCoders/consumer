@@ -28,13 +28,15 @@ public class KafkaPaymentLimitService {
     private static final String GROUP_ID = "payment-limit-consumer-group11";
 
     private final WebSocketService webSocketService;
+    private final BrandDataManager brandDataManager;
     private KafkaConsumer<String, String> consumer;
     private ExecutorService executorService;
     private final AtomicBoolean running = new AtomicBoolean(true);
 
     @Autowired
-    public KafkaPaymentLimitService(WebSocketService webSocketService) {
+    public KafkaPaymentLimitService(WebSocketService webSocketService, BrandDataManager brandDataManager) {
         this.webSocketService = webSocketService;
+        this.brandDataManager = brandDataManager;
     }
 
     @PostConstruct
@@ -76,9 +78,18 @@ public class KafkaPaymentLimitService {
 
                         // 콘솔에 로그 출력
                         System.out.println("------------------------------------");
+                        System.out.println("결제 한도 알림 수신: " + jsonObject.toString());
 
-                        // WebSocket을 통해 클라이언트에게 메시지 전송
+                        // WebSocket을 통해 클라이언트에게 메시지 전송 (브랜드별 저장 포함)
                         webSocketService.sendPaymentLimitAlert(jsonObject);
+                        
+                        // 브랜드 정보 로깅
+                        String brand = jsonObject.optString("store_brand", "Unknown");
+                        if (brandDataManager.isValidBrand(brand)) {
+                            System.out.println("브랜드 '" + brand + "'의 결제 한도 데이터 저장 완료");
+                        } else {
+                            System.out.println("알 수 없는 브랜드: " + brand);
+                        }
                     } catch (Exception e) {
                         System.err.println("JSON 파싱 오류: " + e.getMessage());
                         System.out.println("원본 값: " + record.value());
@@ -96,11 +107,6 @@ public class KafkaPaymentLimitService {
                 consumer.close();
             }
         }
-    }
-    
-    // 로깅을 위한 헬퍼 메서드
-    private void logPaymentData(JSONObject jsonObject) {
-        System.out.println("alert_message: " + jsonObject.getString("alert_message"));
     }
 
     @PreDestroy

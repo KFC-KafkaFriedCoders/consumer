@@ -1,3 +1,8 @@
+// 이 파일은 BrandDataController로 통합되었습니다.
+// BrandDataController에서 브랜드 선택 기능을 포함한 모든 WebSocket 매핑을 처리합니다.
+// 더 이상 사용하지 않습니다.
+
+/*
 package org.example.consumer.controller;
 
 import org.example.consumer.model.BrandSelection;
@@ -19,13 +24,11 @@ public class BrandSelectionController {
         String sessionId = headerAccessor.getSessionId();
         String brand = selection.getBrand();
         
-        // 브랜드 선택 정보 등록
         brandFilterService.registerUserBrandSelection(sessionId, brand);
         
         System.out.println("사용자 세션 " + sessionId + "이(가) 브랜드 '" + brand + "'를 선택했습니다.");
     }
     
-    // 선택을 초기화하는 메서드
     @MessageMapping("/reset-brand-selection") 
     public void resetBrandSelection(SimpMessageHeaderAccessor headerAccessor) {
         String sessionId = headerAccessor.getSessionId();
@@ -34,3 +37,4 @@ public class BrandSelectionController {
         System.out.println("사용자 세션 " + sessionId + "의 브랜드 선택이 초기화되었습니다.");
     }
 }
+*/
