@@ -7,14 +7,18 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -22,21 +26,19 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @Service
 public class KafkaPaymentLimitService {
 
-    // Kafka 설정
     private static final String BOOTSTRAP_SERVERS = "13.209.157.53:9092,15.164.111.153:9092,3.34.32.69:9092";
     private static final String TOPIC = "payment_limit";
     private static final String GROUP_ID = "payment-limit-consumer-group11";
+    private static final int BATCH_SIZE = 10;
 
-    private final WebSocketService webSocketService;
-    private final BrandDataManager brandDataManager;
+    private final BatchProcessorService batchProcessor;
     private KafkaConsumer<String, String> consumer;
     private ExecutorService executorService;
     private final AtomicBoolean running = new AtomicBoolean(true);
 
     @Autowired
-    public KafkaPaymentLimitService(WebSocketService webSocketService, BrandDataManager brandDataManager) {
-        this.webSocketService = webSocketService;
-        this.brandDataManager = brandDataManager;
+    public KafkaPaymentLimitService(BatchProcessorService batchProcessor) {
+        this.batchProcessor = batchProcessor;
     }
 
     @PostConstruct
@@ -49,59 +51,35 @@ public class KafkaPaymentLimitService {
         properties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true");
         properties.put(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, "1000");
+        properties.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, String.valueOf(BATCH_SIZE));
+        properties.put(ConsumerConfig.FETCH_MIN_BYTES_CONFIG, "1024");
+        properties.put(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, "100");
 
         consumer = new KafkaConsumer<>(properties);
         consumer.subscribe(Collections.singletonList(TOPIC));
 
-        System.out.println("PaymentLimitService 시작 중...");
-        System.out.println("브로커 주소: " + BOOTSTRAP_SERVERS);
-        System.out.println("구독 토픽: " + TOPIC);
-        System.out.println("컨슈머 그룹 ID: " + GROUP_ID);
-        
-        // WebSocket으로 서버 시작 상태 전송
-        webSocketService.sendServerStatus("Kafka Consumer 서비스가 시작되었습니다. 토픽: " + TOPIC);
-
-        // 백그라운드 스레드에서 Kafka 메시지 폴링
-        executorService = Executors.newSingleThreadExecutor();
+        executorService = Executors.newFixedThreadPool(2);
         executorService.submit(this::pollMessages);
     }
 
-    private void pollMessages() {
+    @Async("kafkaExecutor")
+    public void pollMessages() {
         try {
             while (running.get()) {
                 ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
 
-                for (ConsumerRecord<String, String> record : records) {
-                    try {
-                        String jsonValue = record.value();
-                        JSONObject jsonObject = new JSONObject(jsonValue);
-
-                        // 콘솔에 로그 출력
-                        System.out.println("------------------------------------");
-                        System.out.println("결제 한도 알림 수신: " + jsonObject.toString());
-
-                        // WebSocket을 통해 클라이언트에게 메시지 전송 (브랜드별 저장 포함)
-                        webSocketService.sendPaymentLimitAlert(jsonObject);
-                        
-                        // 브랜드 정보 로깅
-                        String brand = jsonObject.optString("store_brand", "Unknown");
-                        if (brandDataManager.isValidBrand(brand)) {
-                            System.out.println("브랜드 '" + brand + "'의 결제 한도 데이터 저장 완료");
-                        } else {
-                            System.out.println("알 수 없는 브랜드: " + brand);
-                        }
-                    } catch (Exception e) {
-                        System.err.println("JSON 파싱 오류: " + e.getMessage());
-                        System.out.println("원본 값: " + record.value());
+                if (!records.isEmpty()) {
+                    List<CompletableFuture<Void>> futures = new ArrayList<>();
+                    
+                    for (ConsumerRecord<String, String> record : records) {
+                        futures.add(processRecordAsync(record));
                     }
+                    
+                    CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
                 }
             }
         } catch (Exception e) {
-            System.err.println("메시지 폴링 중 오류 발생: " + e.getMessage());
-            e.printStackTrace();
-            
-            // WebSocket으로 오류 상태 전송
-            webSocketService.sendServerStatus("Kafka Consumer 오류 발생: " + e.getMessage());
+            // Handle error
         } finally {
             if (consumer != null) {
                 consumer.close();
@@ -109,18 +87,28 @@ public class KafkaPaymentLimitService {
         }
     }
 
+    @Async("kafkaExecutor")
+    private CompletableFuture<Void> processRecordAsync(ConsumerRecord<String, String> record) {
+        return CompletableFuture.runAsync(() -> {
+            try {
+                String jsonValue = record.value();
+                JSONObject jsonObject = new JSONObject(jsonValue);
+                batchProcessor.queuePaymentLimitMessage(jsonObject);
+            } catch (Exception e) {
+                // Handle JSON parsing error
+            }
+        });
+    }
+
     @PreDestroy
     public void stop() {
         running.set(false);
+        batchProcessor.shutdown();
         if (executorService != null) {
             executorService.shutdown();
         }
         if (consumer != null) {
             consumer.close();
         }
-        
-        // WebSocket으로 서버 종료 상태 전송
-        webSocketService.sendServerStatus("Kafka Consumer 서비스가 종료되었습니다.");
-        System.out.println("KafkaPaymentLimitService 중지됨");
     }
 }
