@@ -1,5 +1,6 @@
 package org.example.consumer.service;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -11,7 +12,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
-public class BrandFilterService {
+public class TopStoresFilterService {
 
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
@@ -21,9 +22,8 @@ public class BrandFilterService {
     // 사용자 세션별 브랜드 선택 저장
     private final Map<String, String> userBrandSelections = new ConcurrentHashMap<>();
     
-    // 브랜드별 최근 데이터 캐싱
-    private final Map<String, LinkedList<JSONObject>> brandDataCache = new ConcurrentHashMap<>();
-    private static final int MAX_CACHE_SIZE_PER_BRAND = 30;
+    // 브랜드별 최신 Top Stores 데이터 캐싱 (각 브랜드별로 1개씩만 저장)
+    private final Map<String, JSONObject> brandTopStoresCache = new ConcurrentHashMap<>();
     
     /**
      * 사용자의 브랜드 선택을 등록합니다.
@@ -43,41 +43,41 @@ public class BrandFilterService {
             confirmation.toString()
         );
         
-        // 해당 브랜드의 캐시된 모든 데이터 전송
-        sendCachedBrandData(sessionId, brand);
+        // 해당 브랜드의 캐시된 Top Stores 데이터 전송
+        sendCachedTopStoresData(sessionId, brand);
     }
     
     /**
-     * 브랜드 선택 시 해당 브랜드의 모든 캐시된 데이터 전송
+     * 브랜드 선택 시 해당 브랜드의 캐시된 Top Stores 데이터 전송
      */
-    public void sendCachedBrandData(String sessionId, String brand) {
-        List<JSONObject> cachedData = getRecentDataForBrand(brand);
+    public void sendCachedTopStoresData(String sessionId, String brand) {
+        JSONObject cachedData = brandTopStoresCache.get(brand);
         
-        if (!cachedData.isEmpty()) {
+        if (cachedData != null) {
             JSONObject batchData = new JSONObject();
-            batchData.put("event_type", "brand_data_batch");
+            batchData.put("event_type", "top_stores_data_batch");
             batchData.put("brand", brand);
-            batchData.put("items", cachedData);
+            batchData.put("data", cachedData);
             batchData.put("time", LocalDateTime.now().format(formatter));
             
-            // 사용자에게 해당 브랜드의 모든 캐시된 데이터 한 번에 전송
+            // 사용자에게 해당 브랜드의 캐시된 Top Stores 데이터 전송
             messagingTemplate.convertAndSendToUser(
                 sessionId, 
-                "/topic/brand-data", 
+                "/topic/top-stores-data", 
                 batchData.toString()
             );
             
-            System.out.println("브랜드 " + brand + "의 캐시된 데이터 " + cachedData.size() + "개 전송");
+            System.out.println("브랜드 " + brand + "의 캐시된 Top Stores 데이터 전송");
         } else {
             // 데이터가 없을 경우 빈 데이터셋 전송
             JSONObject emptyData = new JSONObject();
-            emptyData.put("event_type", "brand_data_empty");
+            emptyData.put("event_type", "top_stores_data_empty");
             emptyData.put("brand", brand);
-            emptyData.put("message", "No data available for this brand");
+            emptyData.put("message", "No top stores data available for this brand");
             
             messagingTemplate.convertAndSendToUser(
                 sessionId, 
-                "/topic/brand-data", 
+                "/topic/top-stores-data", 
                 emptyData.toString()
             );
         }
@@ -102,66 +102,67 @@ public class BrandFilterService {
     }
     
     /**
-     * 브랜드별 데이터를 캐시에 저장합니다.
+     * 브랜드별 Top Stores 데이터를 캐시에 저장합니다. (최신 데이터 1개만 유지)
      */
-    public void cacheDataByBrand(JSONObject salesData) {
-        String brand = salesData.getString("store_brand");
-        
-        LinkedList<JSONObject> brandCache = brandDataCache.computeIfAbsent(
-            brand, k -> new LinkedList<>()
-        );
-        
-        // 데이터에 고유 ID 추가 (클라이언트에서 NEW 배지 컴루터 용)
-        JSONObject dataWithId = new JSONObject(salesData.toString());
-        if (!dataWithId.has("id")) {
-            dataWithId.put("id", System.currentTimeMillis() + Math.random());
+    public void cacheTopStoresDataByBrand(JSONObject topStoresData) {
+        // top_stores 배열에서 첫 번째 매장의 브랜드를 추출
+        JSONArray topStores = topStoresData.getJSONArray("top_stores");
+        if (topStores.length() > 0) {
+            String brand = topStores.getJSONObject(0).getString("store_brand");
+            
+            // 데이터에 고유 ID 추가 (클라이언트에서 NEW 배지 컴포넌트용)
+            JSONObject dataWithId = new JSONObject(topStoresData.toString());
+            if (!dataWithId.has("id")) {
+                dataWithId.put("id", System.currentTimeMillis() + "-" + Math.random());
+            }
+            
+            // 각 브랜드별로 최신 Top Stores 데이터 1개만 저장
+            brandTopStoresCache.put(brand, dataWithId);
+        }
+    }
+    
+    /**
+     * 특정 브랜드의 Top Stores 데이터를 반환합니다.
+     */
+    public JSONObject getTopStoresDataForBrand(String brand) {
+        return brandTopStoresCache.get(brand);
+    }
+    
+    /**
+     * 새 Top Stores 데이터를 처리하고 관련 사용자에게 전송합니다.
+     */
+    public void processNewData(JSONObject topStoresData) {
+        // top_stores 배열에서 첫 번째 매장의 브랜드를 추출
+        JSONArray topStores = topStoresData.getJSONArray("top_stores");
+        if (topStores.length() == 0) {
+            System.out.println("Top stores 배열이 비어있습니다.");
+            return;
         }
         
-        // 각 브랜드별로 최신 데이터 1개만 저장
-        LinkedList<JSONObject> newBrandCache = new LinkedList<>();
-        newBrandCache.add(dataWithId);
-        brandDataCache.put(brand, newBrandCache);
-    }
-    
-    /**
-     * 특정 브랜드의 최근 데이터를 반환합니다.
-     */
-    public List<JSONObject> getRecentDataForBrand(String brand) {
-        LinkedList<JSONObject> brandCache = brandDataCache.getOrDefault(brand, new LinkedList<>());
-        return new ArrayList<>(brandCache);
-    }
-    
-    /**
-     * 새 데이터를 처리하고 관련 사용자에게 전송합니다.
-     */
-    public void processNewData(JSONObject salesData) {
-        String brand = salesData.getString("store_brand");
+        String brand = topStores.getJSONObject(0).getString("store_brand");
         
         // 캐시에 저장
-        cacheDataByBrand(salesData);
+        cacheTopStoresDataByBrand(topStoresData);
         
-        // 기존 토픽으로도 데이터 전송 (호환성 유지)
-        JSONObject summaryData = new JSONObject();
-        summaryData.put("franchise_id", salesData.getInt("franchise_id"));
-        summaryData.put("store_brand", brand);
-        summaryData.put("store_count", salesData.getInt("store_count"));
-        summaryData.put("total_sales", salesData.getLong("total_sales"));
-        summaryData.put("update_time", salesData.getString("update_time"));
-        summaryData.put("event_type", "sales_total_update");
-        summaryData.put("server_received_time", LocalDateTime.now().format(formatter));
+        // 기존 토픽으로 완전한 데이터 전송 (요약이 아닌 전체 데이터)
+        JSONObject completeData = new JSONObject(topStoresData.toString());
+        completeData.put("store_brand", brand); // 브랜드 정보 추가
+        completeData.put("event_type", "top_stores_update");
+        completeData.put("server_received_time", LocalDateTime.now().format(formatter));
         
         // 고유 ID 추가
-        if (!summaryData.has("id")) {
-            summaryData.put("id", System.currentTimeMillis() + "-" + Math.random());
+        if (!completeData.has("id")) {
+            completeData.put("id", System.currentTimeMillis() + "-" + Math.random());
         }
         
-        messagingTemplate.convertAndSend("/topic/sales-total", summaryData.toString());
+        // 완전한 TOP Stores 데이터를 기본 토픽으로 전송
+        messagingTemplate.convertAndSend("/topic/top-stores", completeData.toString());
         
         // 해당 브랜드를 선택한 사용자에게만 실시간 업데이트 전송
         userBrandSelections.forEach((userSessionId, selectedBrand) -> {
             if (selectedBrand.equals(brand)) {
-                JSONObject updateData = new JSONObject(salesData.toString());
-                updateData.put("event_type", "brand_data_update");
+                JSONObject updateData = new JSONObject(topStoresData.toString());
+                updateData.put("event_type", "top_stores_data_update");
                 updateData.put("server_received_time", LocalDateTime.now().format(formatter));
                 
                 // 고유 ID 추가
@@ -171,7 +172,7 @@ public class BrandFilterService {
                 
                 messagingTemplate.convertAndSendToUser(
                     userSessionId, 
-                    "/topic/brand-data-update", 
+                    "/topic/top-stores-data-update", 
                     updateData.toString()
                 );
             }
