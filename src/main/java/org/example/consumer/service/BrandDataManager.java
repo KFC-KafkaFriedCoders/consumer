@@ -1,24 +1,25 @@
 package org.example.consumer.service;
 
+import org.example.consumer.config.properties.BrandProperties;
+import org.example.consumer.config.properties.DataProperties;
+import org.example.consumer.service.interfaces.BrandDataService;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
-public class BrandDataManager {
+public class BrandDataManager implements BrandDataService {
+    private static final Logger log = LoggerFactory.getLogger(BrandDataManager.class);
     
-    // 브랜드 목록 (Kafka 데이터와 일치하도록 수정)
-    private static final List<String> BRANDS = Arrays.asList(
-        "빽다방", "한신포차", "돌배기집", "롤링파스타", "리춘시장", "막이오름", 
-        "미정국수", "미정국수0410", "백스비어", "백철판0410", "본가", "빽보이피자", "새마을식당", 
-        "성성식당", "역전우동0410", "연돈볼카츠", "원조쌈밥집", "인생설렁탕", 
-        "제순식당", "홍콩반점0410", "홍콩분식", "고투웍", "대한국밥"
-    );
-    
-    private static final int MAX_MESSAGES_PER_BRAND = 15;
+    private final List<String> brands;
+    private final int maxMessagesPerBrand;
     
     // 브랜드별 데이터 저장소
     private final Map<String, LinkedList<JSONObject>> paymentLimitData = new ConcurrentHashMap<>();
@@ -26,73 +27,81 @@ public class BrandDataManager {
     private final Map<String, JSONObject> salesTotalData = new ConcurrentHashMap<>();
     private final Map<String, JSONObject> topStoresData = new ConcurrentHashMap<>();
     
-    public BrandDataManager() {
+    @Autowired
+    public BrandDataManager(BrandProperties brandProperties, DataProperties dataProperties) {
+        this.brands = brandProperties.getNamesList();
+        this.maxMessagesPerBrand = dataProperties.getMaxMessagesPerBrand();
+        
         // 모든 브랜드에 대해 초기 빈 리스트 생성
-        for (String brand : BRANDS) {
+        for (String brand : brands) {
             paymentLimitData.put(brand, new LinkedList<>());
             sameUserData.put(brand, new LinkedList<>());
         }
-        System.out.println("BrandDataManager 초기화 완료. 관리 브랜드 수: " + BRANDS.size());
+        log.info("BrandDataManager 초기화 완료. 관리 브랜드 수: {}", brands.size());
     }
     
     // 결제 한도 데이터 추가
+    @Async("taskExecutor")
     public void addPaymentLimitData(JSONObject data) {
         String brand = data.optString("store_brand", "");
-        if (BRANDS.contains(brand)) {
+        if (brands.contains(brand)) {
             LinkedList<JSONObject> brandData = paymentLimitData.get(brand);
             synchronized (brandData) {
                 brandData.addFirst(data);
-                // 15개 초과 시 오래된 데이터 제거
-                while (brandData.size() > MAX_MESSAGES_PER_BRAND) {
+                // 최대 개수 초과 시 오래된 데이터 제거
+                while (brandData.size() > maxMessagesPerBrand) {
                     brandData.removeLast();
                 }
             }
-            System.out.println("결제 한도 데이터 추가 - 브랜드: " + brand + ", 현재 개수: " + brandData.size());
+            log.debug("결제 한도 데이터 추가 - 브랜드: {}, 현재 개수: {}", brand, brandData.size());
         } else {
-            System.out.println("알 수 없는 브랜드의 결제 한도 데이터: '" + brand + "'");
+            log.warn("알 수 없는 브랜드의 결제 한도 데이터: '{}'", brand);
         }
     }
     
     // 동일인 결제 데이터 추가
+    @Async("taskExecutor")
     public void addSameUserData(JSONObject data) {
         String brand = data.optString("store_brand", "");
-        if (BRANDS.contains(brand)) {
+        if (brands.contains(brand)) {
             LinkedList<JSONObject> brandData = sameUserData.get(brand);
             synchronized (brandData) {
                 brandData.addFirst(data);
-                // 15개 초과 시 오래된 데이터 제거
-                while (brandData.size() > MAX_MESSAGES_PER_BRAND) {
+                // 최대 개수 초과 시 오래된 데이터 제거
+                while (brandData.size() > maxMessagesPerBrand) {
                     brandData.removeLast();
                 }
             }
-            System.out.println("동일인 결제 데이터 추가 - 브랜드: " + brand + ", 현재 개수: " + brandData.size());
+            log.debug("동일인 결제 데이터 추가 - 브랜드: {}, 현재 개수: {}", brand, brandData.size());
         } else {
-            System.out.println("알 수 없는 브랜드의 동일인 결제 데이터: '" + brand + "'");
+            log.warn("알 수 없는 브랜드의 동일인 결제 데이터: '{}'", brand);
         }
     }
     
     // 매출 총합 데이터 업데이트
+    @Async("taskExecutor")
     public void updateSalesTotalData(JSONObject data) {
         String brand = data.optString("store_brand", "");
-        if (BRANDS.contains(brand)) {
+        if (brands.contains(brand)) {
             salesTotalData.put(brand, data);
-            System.out.println("매출 총합 데이터 업데이트 - 브랜드: " + brand);
+            log.debug("매출 총합 데이터 업데이트 - 브랜드: {}", brand);
         } else {
-            System.out.println("알 수 없는 브랜드의 매출 총합 데이터: '" + brand + "'");
+            log.warn("알 수 없는 브랜드의 매출 총합 데이터: '{}'", brand);
         }
     }
     
     // Top Stores 데이터 업데이트 (브랜드 추출 로직 개선)
+    @Async("taskExecutor")
     public void updateTopStoresData(JSONObject data) {
         String extractedBrand = extractBrandFromTopStores(data);
         
-        if (extractedBrand != null && BRANDS.contains(extractedBrand)) {
+        if (extractedBrand != null && brands.contains(extractedBrand)) {
             // 데이터에 브랜드 정보 추가
             data.put("store_brand", extractedBrand);
             topStoresData.put(extractedBrand, data);
-            System.out.println("Top Stores 데이터 업데이트 - 브랜드: " + extractedBrand);
+            log.debug("Top Stores 데이터 업데이트 - 브랜드: {}", extractedBrand);
         } else {
-            System.out.println("알 수 없는 브랜드의 Top Stores 데이터: '" + extractedBrand + "'");
+            log.warn("알 수 없는 브랜드의 Top Stores 데이터: '{}'", extractedBrand);
         }
     }
     
@@ -169,46 +178,49 @@ public class BrandDataManager {
     
     // 전체 브랜드 목록 조회
     public List<String> getAllBrands() {
-        return new ArrayList<>(BRANDS);
+        return new ArrayList<>(brands);
     }
     
     // 브랜드가 유효한지 확인
     public boolean isValidBrand(String brand) {
-        return BRANDS.contains(brand);
+        return brands.contains(brand);
     }
     
     // 현재 저장된 데이터 상태 출력 (디버깅용)
     public void printCurrentStatus() {
-        System.out.println("=== BrandDataManager 현재 상태 ===");
-        for (String brand : BRANDS) {
+        StringBuilder status = new StringBuilder("=== BrandDataManager 현재 상태 ===\n");
+        for (String brand : brands) {
             int paymentLimitCount = paymentLimitData.get(brand).size();
             int sameUserCount = sameUserData.get(brand).size();
             boolean hasSalesTotal = salesTotalData.containsKey(brand);
             boolean hasTopStores = topStoresData.containsKey(brand);
             
-            System.out.println(String.format("브랜드: %s | 결제한도: %d개 | 동일인: %d개 | 매출총합: %s | Top매장: %s", 
+            status.append(String.format("브랜드: %s | 결제한도: %d개 | 동일인: %d개 | 매출총합: %s | Top매장: %s\n", 
                 brand, paymentLimitCount, sameUserCount, 
                 hasSalesTotal ? "있음" : "없음", hasTopStores ? "있음" : "없음"));
         }
-        System.out.println("================================");
+        status.append("================================");
+        log.info(status.toString());
     }
     
     // 특정 브랜드의 모든 데이터 삭제 (필요시 사용)
+    @Async("taskExecutor")
     public void clearBrandData(String brand) {
-        if (BRANDS.contains(brand)) {
+        if (brands.contains(brand)) {
             paymentLimitData.get(brand).clear();
             sameUserData.get(brand).clear();
             salesTotalData.remove(brand);
             topStoresData.remove(brand);
-            System.out.println("브랜드 데이터 삭제 완료: " + brand);
+            log.info("브랜드 데이터 삭제 완료: {}", brand);
         }
     }
     
     // 모든 브랜드 데이터 삭제 (필요시 사용)
+    @Async("taskExecutor")
     public void clearAllData() {
-        for (String brand : BRANDS) {
+        for (String brand : brands) {
             clearBrandData(brand);
         }
-        System.out.println("모든 브랜드 데이터 삭제 완료");
+        log.info("모든 브랜드 데이터 삭제 완료");
     }
 }

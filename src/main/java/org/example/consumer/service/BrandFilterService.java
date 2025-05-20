@@ -1,6 +1,8 @@
 package org.example.consumer.service;
 
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
@@ -13,10 +15,15 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class BrandFilterService {
 
-    @Autowired
-    private SimpMessagingTemplate messagingTemplate;
+    private static final Logger log = LoggerFactory.getLogger(BrandFilterService.class);
     
+    private final SimpMessagingTemplate messagingTemplate;
     private static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    
+    @Autowired
+    public BrandFilterService(SimpMessagingTemplate messagingTemplate) {
+        this.messagingTemplate = messagingTemplate;
+    }
     
     // 사용자 세션별 브랜드 선택 저장
     private final Map<String, String> userBrandSelections = new ConcurrentHashMap<>();
@@ -67,7 +74,7 @@ public class BrandFilterService {
                 batchData.toString()
             );
             
-            System.out.println("브랜드 " + brand + "의 캐시된 데이터 " + cachedData.size() + "개 전송");
+            log.debug("브랜드 {}의 캐시된 데이터 {}개 전송", brand, cachedData.size());
         } else {
             // 데이터가 없을 경우 빈 데이터셋 전송
             JSONObject emptyData = new JSONObject();

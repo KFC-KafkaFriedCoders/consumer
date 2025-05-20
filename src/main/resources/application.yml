@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: consumer
+  websocket:
+    message-size-limit: 65536
+  task:
+    scheduling:
+      pool:
+        size: 5
+
+server:
+  port: 8080
+
+logging:
+  level:
+    root: INFO
+    org.apache.kafka: WARN
+    org.example.consumer: INFO
+    org.springframework.web.socket: INFO
+    org.springframework.messaging: INFO
+
+app:
+  brands:
+    names: 빽다방,한신포차,돌배기집,롤링파스타,리춘시장,막이오름,미정국수,미정국수0410,백스비어,백철판0410,본가,빽보이피자,새마을식당,성성식당,역전우동0410,연돈볼카츠,원조쌈밥집,인생설렁탕,제순식당,홍콩반점0410,홍콩분식,고투웍,대한국밥
+  data:
+    max-messages-per-brand: 15
+    date-format: yyyy-MM-dd HH:mm:ss
+  websocket:
+    allowed-origins: "*"
+    endpoint: /payment-limit-ws
+    broker-prefixes: /topic,/user
+    app-destination-prefix: /app
+    user-destination-prefix: /user
+  async:
+    core-pool-size: 5
+    max-pool-size: 10
+    queue-capacity: 25
+    thread-name-prefix: async-task-
+  batch:
+    flush-interval-ms: 2000
+    max-batch-size: 100
