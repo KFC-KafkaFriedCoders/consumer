@@ -28,12 +28,7 @@ jobs:
           echo "${{ secrets.EC2_KEY }}" > ec2_key.pem
           chmod 600 ec2_key.pem
 
-      - name: 빌드된 JAR 파일을 EC2로 복사
-        run: |
-          scp -i ec2_key.pem -o StrictHostKeyChecking=no \
-            build/libs/consumer-*.jar ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USER }}/app.jar
-
-      - name: EC2에 SSH 접속해 서버 재시작
+      - name: EC2에서 기존 애플리케이션 정리
         run: |
           ssh -i ec2_key.pem -o StrictHostKeyChecking=no \
             ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
@@ -41,6 +36,21 @@ jobs:
               pkill -f 'java -jar.*app.jar' || true
               sleep 5
               
+              # 기존 파일들 삭제
+              sudo rm -rf /home/${USER}/app.jar
+              sudo rm -rf /home/${USER}/app.log
+              echo "기존 파일들을 정리했습니다."
+          EOF
+
+      - name: 빌드된 JAR 파일을 EC2로 복사
+        run: |
+          scp -i ec2_key.pem -o StrictHostKeyChecking=no \
+            build/libs/consumer-*.jar ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/${{ secrets.EC2_USER }}/app.jar
+
+      - name: EC2에서 새로운 애플리케이션 시작
+        run: |
+          ssh -i ec2_key.pem -o StrictHostKeyChecking=no \
+            ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
               # 새로운 애플리케이션 시작
               nohup java -jar /home/${USER}/app.jar > app.log 2>&1 &
               
@@ -48,9 +58,10 @@ jobs:
               sleep 10
               if pgrep -f 'java -jar.*app.jar' > /dev/null; then
                 echo "애플리케이션이 성공적으로 시작되었습니다."
+                echo "PID: $(pgrep -f 'java -jar.*app.jar')"
               else
                 echo "애플리케이션 시작 실패. 로그를 확인하세요."
-                tail -20 app.log
+                tail -20 app.log || echo "로그 파일이 없습니다."
                 exit 1
               fi
           EOF

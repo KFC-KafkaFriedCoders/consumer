@@ -17,106 +17,52 @@ public class WebSocketService {
 
     private final SimpMessagingTemplate messagingTemplate;
     private final BrandDataManager brandDataManager;
+    private final UnifiedBrandFilterService unifiedBrandFilterService;
     private static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     @Autowired
-    public WebSocketService(SimpMessagingTemplate messagingTemplate, BrandDataManager brandDataManager) {
+    public WebSocketService(SimpMessagingTemplate messagingTemplate, 
+                          BrandDataManager brandDataManager,
+                          UnifiedBrandFilterService unifiedBrandFilterService) {
         this.messagingTemplate = messagingTemplate;
         this.brandDataManager = brandDataManager;
+        this.unifiedBrandFilterService = unifiedBrandFilterService;
     }
     
     public SimpMessagingTemplate getMessagingTemplate() {
         return messagingTemplate;
     }
 
-    @Async("websocketExecutor")
-    public CompletableFuture<Void> sendPaymentLimitBatchAsync(List<JSONObject> paymentDataList) {
-        return CompletableFuture.runAsync(() -> {
-            JSONObject batchMessage = new JSONObject();
-            batchMessage.put("event_type", "payment_limit_batch");
-            batchMessage.put("messages", new JSONArray(paymentDataList));
-            batchMessage.put("count", paymentDataList.size());
-            batchMessage.put("batch_time", LocalDateTime.now().format(formatter));
-            
-            messagingTemplate.convertAndSend("/topic/payment-limit", batchMessage.toString());
-            System.out.println("[WebSocket 전송] 결제한도 배치 전송 - 메시지 수: " + paymentDataList.size() + ", 토픽: /topic/payment-limit");
-        });
-    }
-
-    @Async("websocketExecutor")
-    public CompletableFuture<Void> sendSameUserBatchAsync(List<JSONObject> sameUserDataList) {
-        return CompletableFuture.runAsync(() -> {
-            JSONObject batchMessage = new JSONObject();
-            batchMessage.put("event_type", "same_user_batch");
-            batchMessage.put("messages", new JSONArray(sameUserDataList));
-            batchMessage.put("count", sameUserDataList.size());
-            batchMessage.put("batch_time", LocalDateTime.now().format(formatter));
-            
-            messagingTemplate.convertAndSend("/topic/payment-same-user", batchMessage.toString());
-            System.out.println("[WebSocket 전송] 동일인결제 배치 전송 - 메시지 수: " + sameUserDataList.size() + ", 토픽: /topic/payment-same-user");
-        });
-    }
-
-    @Async("websocketExecutor")
-    public CompletableFuture<Void> sendSalesTotalAsync(JSONObject salesData) {
-        return CompletableFuture.runAsync(() -> {
-            messagingTemplate.convertAndSend("/topic/sales-total", salesData.toString());
-            String brand = salesData.optString("store_brand", "Unknown");
-            System.out.println("[WebSocket 전송] 매출총합 데이터 전송 - 브랜드: " + brand + ", 토픽: /topic/sales-total");
-        });
-    }
-
-    @Async("websocketExecutor")
-    public CompletableFuture<Void> sendTopStoresAsync(JSONObject topStoresData) {
-        return CompletableFuture.runAsync(() -> {
-            messagingTemplate.convertAndSend("/topic/top-stores", topStoresData.toString());
-            String brand = topStoresData.optString("store_brand", "Unknown");
-            System.out.println("[WebSocket 전송] Top매장 데이터 전송 - 브랜드: " + brand + ", 토픽: /topic/top-stores");
-        });
-    }
-
-    @Async("websocketExecutor")
-    public CompletableFuture<Void> sendPaymentLimitAlertAsync(JSONObject paymentData) {
-        return CompletableFuture.runAsync(() -> {
-            paymentData.put("server_received_time", LocalDateTime.now().format(formatter));
-            paymentData.put("event_type", "payment_limit_alert");
-            
-            if (!paymentData.has("id")) {
-                paymentData.put("id", System.currentTimeMillis() + Math.random());
-            }
-            
-            brandDataManager.addPaymentLimitData(paymentData);
-            messagingTemplate.convertAndSend("/topic/payment-limit", paymentData.toString());
-            
-            String brand = paymentData.optString("store_brand", "Unknown");
-            System.out.println("[WebSocket 전송] 결제한도 알림 전송 - 브랜드: " + brand + ", ID: " + paymentData.opt("id"));
-        });
-    }
-
-    @Async("websocketExecutor")
-    public CompletableFuture<Void> sendSameUserAlertAsync(JSONObject sameUserData) {
-        return CompletableFuture.runAsync(() -> {
-            sameUserData.put("server_received_time", LocalDateTime.now().format(formatter));
-            sameUserData.put("event_type", "payment_same_user_alert");
-            
-            if (!sameUserData.has("id")) {
-                sameUserData.put("id", System.currentTimeMillis() + Math.random());
-            }
-            
-            brandDataManager.addSameUserData(sameUserData);
-            messagingTemplate.convertAndSend("/topic/payment-same-user", sameUserData.toString());
-            
-            String brand = sameUserData.optString("store_brand", "Unknown");
-            System.out.println("[WebSocket 전송] 동일인결제 알림 전송 - 브랜드: " + brand + ", ID: " + sameUserData.opt("id"));
-        });
-    }
-
     public void sendPaymentLimitAlert(JSONObject paymentData) {
-        sendPaymentLimitAlertAsync(paymentData);
+        paymentData.put("server_received_time", LocalDateTime.now().format(formatter));
+        paymentData.put("event_type", "payment_limit_alert");
+        
+        if (!paymentData.has("id")) {
+            paymentData.put("id", System.currentTimeMillis() + Math.random());
+        }
+        
+        brandDataManager.addPaymentLimitData(paymentData);
+        
+        String brand = paymentData.optString("store_brand", "");
+        if (brandDataManager.isValidBrand(brand)) {
+            unifiedBrandFilterService.notifyBrandUsers(brand, paymentData, "/topic/brand-payment-limit-update", "payment_limit_alert");
+        }
     }
-    
+
     public void sendSameUserAlert(JSONObject sameUserData) {
-        sendSameUserAlertAsync(sameUserData);
+        sameUserData.put("server_received_time", LocalDateTime.now().format(formatter));
+        sameUserData.put("event_type", "payment_same_user_alert");
+        
+        if (!sameUserData.has("id")) {
+            sameUserData.put("id", System.currentTimeMillis() + Math.random());
+        }
+        
+        brandDataManager.addSameUserData(sameUserData);
+        
+        String brand = sameUserData.optString("store_brand", "");
+        if (brandDataManager.isValidBrand(brand)) {
+            unifiedBrandFilterService.notifyBrandUsers(brand, sameUserData, "/topic/brand-same-user-update", "payment_same_user_alert");
+        }
     }
     
     public void sendSalesTotalData(JSONObject salesData) {
@@ -128,7 +74,7 @@ public class WebSocketService {
         }
         
         brandDataManager.updateSalesTotalData(salesData);
-        sendSalesTotalAsync(salesData);
+        unifiedBrandFilterService.processNewSalesData(salesData);
     }
     
     public void sendTopStoresData(JSONObject topStoresData) {
@@ -140,7 +86,7 @@ public class WebSocketService {
         }
         
         brandDataManager.updateTopStoresData(topStoresData);
-        sendTopStoresAsync(topStoresData);
+        unifiedBrandFilterService.processNewTopStoresData(topStoresData);
     }
     
     @Async("websocketExecutor")
@@ -152,7 +98,6 @@ public class WebSocketService {
             statusData.put("time", LocalDateTime.now().format(formatter));
             
             messagingTemplate.convertAndSend("/topic/server-status", statusData.toString());
-            System.out.println("[WebSocket 전송] 서버 상태 메시지 - 내용: " + status);
         });
     }
     
@@ -177,8 +122,8 @@ public class WebSocketService {
             response.put("count", brandData.size());
             response.put("server_sent_time", LocalDateTime.now().format(formatter));
             
+            System.out.println("[WS 전송] 결제한도 | 브랜드: " + brand + ", 세션: " + sessionId + ", 데이터: " + brandData.size() + "개");
             messagingTemplate.convertAndSendToUser(sessionId, "/topic/brand-payment-limit", response.toString());
-            System.out.println("[WebSocket 전송] 브랜드별 결제한도 데이터 - 브랜드: " + brand + ", 세션: " + sessionId + ", 데이터 수: " + brandData.size());
         });
     }
 
@@ -203,8 +148,8 @@ public class WebSocketService {
             response.put("count", brandData.size());
             response.put("server_sent_time", LocalDateTime.now().format(formatter));
             
+            System.out.println("[WS 전송] 동일인결제 | 브랜드: " + brand + ", 세션: " + sessionId + ", 데이터: " + brandData.size() + "개");
             messagingTemplate.convertAndSendToUser(sessionId, "/topic/brand-same-user", response.toString());
-            System.out.println("[WebSocket 전송] 브랜드별 동일인결제 데이터 - 브랜드: " + brand + ", 세션: " + sessionId + ", 데이터 수: " + brandData.size());
         });
     }
 
@@ -230,8 +175,8 @@ public class WebSocketService {
             }
             response.put("server_sent_time", LocalDateTime.now().format(formatter));
             
+            System.out.println("[WS 전송] 매출총계 | 브랜드: " + brand + ", 세션: " + sessionId + ", 데이터: " + (brandData != null ? "O" : "X"));
             messagingTemplate.convertAndSendToUser(sessionId, "/topic/brand-sales-total", response.toString());
-            System.out.println("[WebSocket 전송] 브랜드별 매출총합 데이터 - 브랜드: " + brand + ", 세션: " + sessionId + ", 데이터 존재: " + (brandData != null));
         });
     }
 
@@ -257,8 +202,8 @@ public class WebSocketService {
             }
             response.put("server_sent_time", LocalDateTime.now().format(formatter));
             
+            System.out.println("[WS 전송] TOP매장 | 브랜드: " + brand + ", 세션: " + sessionId + ", 데이터: " + (brandData != null ? "O" : "X"));
             messagingTemplate.convertAndSendToUser(sessionId, "/topic/brand-top-stores", response.toString());
-            System.out.println("[WebSocket 전송] 브랜드별 Top매장 데이터 - 브랜드: " + brand + ", 세션: " + sessionId + ", 데이터 존재: " + (brandData != null));
         });
     }
 
@@ -282,8 +227,8 @@ public class WebSocketService {
             response.put("count", brands.size());
             response.put("server_sent_time", LocalDateTime.now().format(formatter));
             
+            System.out.println("[WS 전송] 브랜드목록 | 세션: " + sessionId + ", 브랜드: " + brands.size() + "개");
             messagingTemplate.convertAndSendToUser(sessionId, "/topic/all-brands", response.toString());
-            System.out.println("[WebSocket 전송] 모든 브랜드 목록 - 세션: " + sessionId + ", 브랜드 수: " + brands.size());
         });
     }
 

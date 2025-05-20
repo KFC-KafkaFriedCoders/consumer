@@ -10,16 +10,16 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Logger;
 
 @Service
 public class BatchProcessorService {
 
+    private static final Logger logger = Logger.getLogger(BatchProcessorService.class.getName());
     private static final int BATCH_SIZE = 10;
     private static final int MAX_QUEUE_SIZE = 1000;
     private static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -44,16 +44,14 @@ public class BatchProcessorService {
     public CompletableFuture<Void> queuePaymentLimitMessage(JSONObject message) {
         return CompletableFuture.runAsync(() -> {
             try {
-                message.put("server_received_time", LocalDateTime.now().format(formatter));
-                message.put("event_type", "payment_limit_alert");
-                if (!message.has("id")) {
-                    message.put("id", System.currentTimeMillis() + Math.random());
-                }
+                JSONObject processedMessage = prepareMessage(message, "payment_limit_alert");
+                MessageBatch batch = new MessageBatch(processedMessage, MessageType.PAYMENT_LIMIT);
                 
-                MessageBatch batch = new MessageBatch(message, MessageType.PAYMENT_LIMIT);
-                paymentLimitBatch.offer(batch);
+                if (!paymentLimitBatch.offer(batch)) {
+                    logger.warning("Payment limit queue is full, dropping message");
+                }
             } catch (Exception e) {
-                // Handle error
+                logger.severe("Error queuing payment limit message: " + e.getMessage());
             }
         });
     }
@@ -62,16 +60,14 @@ public class BatchProcessorService {
     public CompletableFuture<Void> queueSameUserMessage(JSONObject message) {
         return CompletableFuture.runAsync(() -> {
             try {
-                message.put("server_received_time", LocalDateTime.now().format(formatter));
-                message.put("event_type", "payment_same_user_alert");
-                if (!message.has("id")) {
-                    message.put("id", System.currentTimeMillis() + Math.random());
-                }
+                JSONObject processedMessage = prepareMessage(message, "payment_same_user_alert");
+                MessageBatch batch = new MessageBatch(processedMessage, MessageType.SAME_USER);
                 
-                MessageBatch batch = new MessageBatch(message, MessageType.SAME_USER);
-                sameUserBatch.offer(batch);
+                if (!sameUserBatch.offer(batch)) {
+                    logger.warning("Same user queue is full, dropping message");
+                }
             } catch (Exception e) {
-                // Handle error
+                logger.severe("Error queuing same user message: " + e.getMessage());
             }
         });
     }
@@ -80,16 +76,14 @@ public class BatchProcessorService {
     public CompletableFuture<Void> queueSalesTotalMessage(JSONObject message) {
         return CompletableFuture.runAsync(() -> {
             try {
-                message.put("server_received_time", LocalDateTime.now().format(formatter));
-                message.put("event_type", "sales_total_update");
-                if (!message.has("id")) {
-                    message.put("id", System.currentTimeMillis() + Math.random());
-                }
+                JSONObject processedMessage = prepareMessage(message, "sales_total_update");
+                MessageBatch batch = new MessageBatch(processedMessage, MessageType.SALES_TOTAL);
                 
-                MessageBatch batch = new MessageBatch(message, MessageType.SALES_TOTAL);
-                salesTotalBatch.offer(batch);
+                if (!salesTotalBatch.offer(batch)) {
+                    logger.warning("Sales total queue is full, dropping message");
+                }
             } catch (Exception e) {
-                // Handle error
+                logger.severe("Error queuing sales total message: " + e.getMessage());
             }
         });
     }
@@ -98,16 +92,14 @@ public class BatchProcessorService {
     public CompletableFuture<Void> queueTopStoresMessage(JSONObject message) {
         return CompletableFuture.runAsync(() -> {
             try {
-                message.put("server_received_time", LocalDateTime.now().format(formatter));
-                message.put("event_type", "top_stores_update");
-                if (!message.has("id")) {
-                    message.put("id", System.currentTimeMillis() + "-" + Math.random());
-                }
+                JSONObject processedMessage = prepareMessage(message, "top_stores_update");
+                MessageBatch batch = new MessageBatch(processedMessage, MessageType.TOP_STORES);
                 
-                MessageBatch batch = new MessageBatch(message, MessageType.TOP_STORES);
-                topStoresBatch.offer(batch);
+                if (!topStoresBatch.offer(batch)) {
+                    logger.warning("Top stores queue is full, dropping message");
+                }
             } catch (Exception e) {
-                // Handle error
+                logger.severe("Error queuing top stores message: " + e.getMessage());
             }
         });
     }
@@ -116,118 +108,109 @@ public class BatchProcessorService {
     public void processBatches() {
         if (!processingActive.get()) return;
 
-        List<CompletableFuture<Void>> futures = new ArrayList<>();
-        
-        futures.add(processBatchQueue(paymentLimitBatch, MessageType.PAYMENT_LIMIT));
-        futures.add(processBatchQueue(sameUserBatch, MessageType.SAME_USER));
-        futures.add(processBatchQueue(salesTotalBatch, MessageType.SALES_TOTAL));
-        futures.add(processBatchQueue(topStoresBatch, MessageType.TOP_STORES));
+        try {
+            List<CompletableFuture<Void>> futures = new ArrayList<>();
+            
+            futures.add(processBatchQueue(paymentLimitBatch, MessageType.PAYMENT_LIMIT));
+            futures.add(processBatchQueue(sameUserBatch, MessageType.SAME_USER));
+            futures.add(processBatchQueue(salesTotalBatch, MessageType.SALES_TOTAL));
+            futures.add(processBatchQueue(topStoresBatch, MessageType.TOP_STORES));
 
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        } catch (Exception e) {
+            logger.severe("Error processing batches: " + e.getMessage());
+        }
+    }
+
+    public void shutdown() {
+        processingActive.set(false);
     }
 
     @Async("batchExecutor")
     private CompletableFuture<Void> processBatchQueue(BlockingQueue<MessageBatch> queue, MessageType type) {
         return CompletableFuture.runAsync(() -> {
-            List<MessageBatch> messages = new ArrayList<>();
-            queue.drainTo(messages, BATCH_SIZE);
+            try {
+                List<MessageBatch> messages = new ArrayList<>();
+                queue.drainTo(messages, BATCH_SIZE);
 
-            if (!messages.isEmpty()) {
-                switch (type) {
-                    case PAYMENT_LIMIT:
-                        processPaymentLimitBatch(messages);
-                        break;
-                    case SAME_USER:
-                        processSameUserBatch(messages);
-                        break;
-                    case SALES_TOTAL:
-                        processSalesTotalBatch(messages);
-                        break;
-                    case TOP_STORES:
-                        processTopStoresBatch(messages);
-                        break;
+                if (!messages.isEmpty()) {
+                    switch (type) {
+                        case PAYMENT_LIMIT:
+                            processPaymentLimitBatch(messages);
+                            break;
+                        case SAME_USER:
+                            processSameUserBatch(messages);
+                            break;
+                        case SALES_TOTAL:
+                            processSalesTotalBatch(messages);
+                            break;
+                        case TOP_STORES:
+                            processTopStoresBatch(messages);
+                            break;
+                    }
                 }
+            } catch (Exception e) {
+                logger.severe("Error processing batch queue for type " + type + ": " + e.getMessage());
             }
         });
     }
 
     private void processPaymentLimitBatch(List<MessageBatch> messages) {
-        Map<String, List<JSONObject>> brandGroups = groupMessagesByBrand(messages);
-        
-        List<CompletableFuture<Void>> futures = new ArrayList<>();
-        
-        for (Map.Entry<String, List<JSONObject>> entry : brandGroups.entrySet()) {
-            futures.add(CompletableFuture.runAsync(() -> {
-                for (JSONObject message : entry.getValue()) {
-                    brandDataManager.addPaymentLimitData(message);
-                }
-            }).thenCompose(v -> 
-                webSocketService.sendPaymentLimitBatchAsync(entry.getValue())
-            ));
+        try {
+            // 전체 브로드캐스트 제거, 개별 처리만 수행
+            for (MessageBatch batch : messages) {
+                webSocketService.sendPaymentLimitAlert(batch.getMessage());
+            }
+        } catch (Exception e) {
+            logger.severe("Error processing payment limit batch: " + e.getMessage());
         }
-        
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
     }
 
     private void processSameUserBatch(List<MessageBatch> messages) {
-        Map<String, List<JSONObject>> brandGroups = groupMessagesByBrand(messages);
-        
-        List<CompletableFuture<Void>> futures = new ArrayList<>();
-        
-        for (Map.Entry<String, List<JSONObject>> entry : brandGroups.entrySet()) {
-            futures.add(CompletableFuture.runAsync(() -> {
-                for (JSONObject message : entry.getValue()) {
-                    brandDataManager.addSameUserData(message);
-                }
-            }).thenCompose(v -> 
-                webSocketService.sendSameUserBatchAsync(entry.getValue())
-            ));
+        try {
+            // 전체 브로드캐스트 제거, 개별 처리만 수행
+            for (MessageBatch batch : messages) {
+                webSocketService.sendSameUserAlert(batch.getMessage());
+            }
+        } catch (Exception e) {
+            logger.severe("Error processing same user batch: " + e.getMessage());
         }
-        
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
     }
 
     private void processSalesTotalBatch(List<MessageBatch> messages) {
-        List<CompletableFuture<Void>> futures = new ArrayList<>();
-        
-        for (MessageBatch batch : messages) {
-            futures.add(CompletableFuture.runAsync(() -> {
-                brandDataManager.updateSalesTotalData(batch.getMessage());
-            }).thenCompose(v -> 
-                webSocketService.sendSalesTotalAsync(batch.getMessage())
-            ));
+        try {
+            // 개별 처리만 수행 (브랜드별 필터링은 WebSocketService에서 처리)
+            for (MessageBatch batch : messages) {
+                webSocketService.sendSalesTotalData(batch.getMessage());
+            }
+        } catch (Exception e) {
+            logger.severe("Error processing sales total batch: " + e.getMessage());
         }
-        
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
     }
 
     private void processTopStoresBatch(List<MessageBatch> messages) {
-        List<CompletableFuture<Void>> futures = new ArrayList<>();
-        
-        for (MessageBatch batch : messages) {
-            futures.add(CompletableFuture.runAsync(() -> {
-                brandDataManager.updateTopStoresData(batch.getMessage());
-            }).thenCompose(v -> 
-                webSocketService.sendTopStoresAsync(batch.getMessage())
-            ));
+        try {
+            // 개별 처리만 수행 (브랜드별 필터링은 WebSocketService에서 처리)
+            for (MessageBatch batch : messages) {
+                webSocketService.sendTopStoresData(batch.getMessage());
+            }
+        } catch (Exception e) {
+            logger.severe("Error processing top stores batch: " + e.getMessage());
         }
-        
-        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
     }
 
-    private Map<String, List<JSONObject>> groupMessagesByBrand(List<MessageBatch> messages) {
-        Map<String, List<JSONObject>> brandGroups = new ConcurrentHashMap<>();
-        
-        for (MessageBatch batch : messages) {
-            String brand = batch.getMessage().optString("store_brand", "Unknown");
-            brandGroups.computeIfAbsent(brand, k -> new ArrayList<>()).add(batch.getMessage());
+    private JSONObject prepareMessage(JSONObject message, String eventType) {
+        try {
+            message.put("server_received_time", LocalDateTime.now().format(formatter));
+            message.put("event_type", eventType);
+            if (!message.has("id")) {
+                message.put("id", System.currentTimeMillis() + Math.random());
+            }
+            return message;
+        } catch (Exception e) {
+            logger.warning("Error preparing message: " + e.getMessage());
+            return message;
         }
-        
-        return brandGroups;
-    }
-
-    public void shutdown() {
-        processingActive.set(false);
     }
 
     private static class MessageBatch {

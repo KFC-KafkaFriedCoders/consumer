@@ -1,6 +1,6 @@
 package org.example.consumer.config;
 
-import org.example.consumer.service.BrandFilterService;
+import org.example.consumer.service.UnifiedBrandFilterService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
@@ -11,15 +11,13 @@ import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 public class WebSocketEventListener {
 
     @Autowired
-    private BrandFilterService brandFilterService;
+    private UnifiedBrandFilterService unifiedBrandFilterService;
 
     @EventListener
     public void handleWebSocketDisconnectListener(SessionDisconnectEvent event) {
         StompHeaderAccessor headerAccessor = StompHeaderAccessor.wrap(event.getMessage());
         String sessionId = headerAccessor.getSessionId();
         
-        // 연결 종료 시 세션 정리
-        brandFilterService.removeUserSession(sessionId);
-        System.out.println("사용자 세션 종료: " + sessionId);
+        unifiedBrandFilterService.removeUserSession(sessionId);
     }
 }
