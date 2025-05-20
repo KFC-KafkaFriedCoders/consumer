@@ -39,25 +39,14 @@ tasks.named('test') {
 	useJUnitPlatform()
 }
 
-jar {
-    manifest {
-        attributes(
-            'Main-Class': 'org.example.consumer.ConsumerApplication'
-        )
-    }
-    
-    from {
-        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
-    }
-    
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-}
-
+// Spring Boot 실행 가능 JAR 생성 설정
 bootJar {
     enabled = true
     archiveClassifier = ''
+    mainClass = 'org.example.consumer.ConsumerApplication'
 }
 
+// 일반 JAR 빌드는 비활성화 (Spring Boot JAR만 생성)
 jar {
     enabled = false
 }
