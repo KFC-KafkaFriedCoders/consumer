@@ -238,6 +238,33 @@ public class WebSocketService implements WebSocketNotificationService {
             e.printStackTrace();
         }
     }
+    
+    @Async("taskExecutor")
+    public void sendNonResponseData(JSONObject nonResponseData) {
+        try {
+            if (nonResponseData == null) {
+                log.warn("비응답 매장 데이터가 null입니다.");
+                return;
+            }
+            
+            JSONObject safeData = new JSONObject();
+            for (String key : nonResponseData.keySet()) {
+                safeData.put(key, nonResponseData.get(key));
+            }
+            
+            safeData.put("server_received_time", LocalDateTime.now().format(formatter));
+            safeData.put("event_type", "non_response_data");
+            
+            if (!safeData.has("id")) {
+                safeData.put("id", System.currentTimeMillis() + "-" + Math.random());
+            }
+            
+            messagingTemplate.convertAndSend("/topic/non-response", safeData.toString());
+            log.debug("비응답 매장 데이터 전송: {}", safeData.optString("store_brand", "unknown"));
+        } catch (Exception e) {
+            log.error("비응답 매장 데이터 전송 중 오류: {}", e.getMessage());
+        }
+    }
 
     @Async("taskExecutor")
     public void sendBrandPaymentLimitData(String brand, String sessionId) {

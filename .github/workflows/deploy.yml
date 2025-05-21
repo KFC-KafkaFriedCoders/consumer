@@ -41,6 +41,9 @@ jobs:
               pkill -f 'java -jar.*app.jar' || true
               sleep 5
           
+              # 기존 로그 파일 삭제
+              rm -f app.log
+              
               # 새로운 애플리케이션 시작
               nohup java -jar /home/${USER}/app.jar > app.log 2>&1 &
           

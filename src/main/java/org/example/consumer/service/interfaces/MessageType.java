@@ -4,5 +4,6 @@ public enum MessageType {
     PAYMENT_LIMIT,
     SAME_USER,
     SALES_TOTAL,
-    TOP_STORES
+    TOP_STORES,
+    NON_RESPONSE
 }
