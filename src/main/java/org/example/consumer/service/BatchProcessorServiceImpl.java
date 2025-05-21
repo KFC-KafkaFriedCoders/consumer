@@ -4,6 +4,7 @@ import org.example.consumer.service.interfaces.BatchProcessorService;
 import org.example.consumer.service.interfaces.BrandDataService;
 import org.example.consumer.service.interfaces.MessageType;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,6 +51,10 @@ public class BatchProcessorServiceImpl implements BatchProcessorService {
     @Async("taskExecutor")
     public void addToQueue(MessageType type, JSONObject message) {
         try {
+            if (message == null) {
+                log.warn("메시지 큐에 null 메시지가 추가되었습니다. 타입: {}", type);
+                return;
+            }
             messageQueues.get(type).offer(message);
         } catch (Exception e) {
             log.error("메시지 큐 추가 오류: {}", e.getMessage());
@@ -101,29 +106,86 @@ public class BatchProcessorServiceImpl implements BatchProcessorService {
     
     private void processBatchPaymentLimit(List<JSONObject> batch) {
         for (JSONObject message : batch) {
-            brandDataService.addPaymentLimitData(message);
-            messagingTemplate.convertAndSend("/topic/payment-limit", message.toString());
+            if (message == null) {
+                log.warn("결제 한도 배치에 null 메시지가 포함되어 있습니다.");
+                continue;
+            }
+            
+            try {
+                brandDataService.addPaymentLimitData(message);
+                messagingTemplate.convertAndSend("/topic/payment-limit", message.toString());
+            } catch (Exception e) {
+                log.error("결제 한도 데이터 처리 중 오류: {}", e.getMessage());
+            }
         }
     }
     
     private void processBatchSameUser(List<JSONObject> batch) {
         for (JSONObject message : batch) {
-            brandDataService.addSameUserData(message);
-            messagingTemplate.convertAndSend("/topic/payment-same-user", message.toString());
+            if (message == null) {
+                log.warn("동일 사용자 배치에 null 메시지가 포함되어 있습니다.");
+                continue;
+            }
+            
+            try {
+                brandDataService.addSameUserData(message);
+                messagingTemplate.convertAndSend("/topic/payment-same-user", message.toString());
+            } catch (Exception e) {
+                log.error("동일 사용자 데이터 처리 중 오류: {}", e.getMessage());
+            }
         }
     }
     
     private void processBatchSalesTotal(List<JSONObject> batch) {
         for (JSONObject message : batch) {
-            brandDataService.updateSalesTotalData(message);
-            messagingTemplate.convertAndSend("/topic/sales-total", message.toString());
+            if (message == null) {
+                log.warn("매출 총합 배치에 null 메시지가 포함되어 있습니다.");
+                continue;
+            }
+            
+            try {
+                brandDataService.updateSalesTotalData(message);
+                messagingTemplate.convertAndSend("/topic/sales-total", message.toString());
+            } catch (Exception e) {
+                log.error("매출 총합 데이터 처리 중 오류: {}", e.getMessage());
+            }
         }
     }
     
     private void processBatchTopStores(List<JSONObject> batch) {
         for (JSONObject message : batch) {
-            brandDataService.updateTopStoresData(message);
-            messagingTemplate.convertAndSend("/topic/top-stores", message.toString());
+            if (message == null) {
+                log.warn("Top Stores 배치에 null 메시지가 포함되어 있습니다.");
+                continue;
+            }
+            
+            try {
+                // 메시지가 유효한지 추가 검사
+                if (!message.has("top_stores")) {
+                    log.warn("Top Stores 메시지에 top_stores 배열이 없습니다: {}", message);
+                    continue;
+                }
+                
+                // top_stores 배열이 비어있는지 확인
+                JSONArray topStores = message.getJSONArray("top_stores");
+                if (topStores.length() == 0) {
+                    log.warn("Top Stores 배열이 비어있습니다: {}", message);
+                    continue;
+                }
+                
+                // 첫 번째 매장에 store_brand가 있는지 확인
+                JSONObject firstStore = topStores.getJSONObject(0);
+                if (!firstStore.has("store_brand")) {
+                    log.warn("Top Stores 매장에 store_brand 필드가 없습니다: {}", firstStore);
+                    continue;
+                }
+                
+                // 유효성 검증이 완료된 메시지를 처리
+                brandDataService.updateTopStoresData(message);
+                messagingTemplate.convertAndSend("/topic/top-stores", message.toString());
+            } catch (Exception e) {
+                log.error("Top Stores 데이터 처리 중 오류: {}", e.getMessage());
+            }
         }
     }
     

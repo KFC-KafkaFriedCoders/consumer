@@ -7,6 +7,7 @@ import java.util.List;
 
 public class TopStores {
     private String id;
+    private int franchiseId;
     private String storeBrand;
     private List<TopStore> topStores;
     private String timestamp;
@@ -20,6 +21,7 @@ public class TopStores {
     public TopStores(JSONObject jsonData) {
         this();
         this.id = jsonData.optString("id", null);
+        this.franchiseId = jsonData.optInt("franchise_id", 0);
         this.storeBrand = jsonData.optString("store_brand", "");
         this.timestamp = jsonData.optString("timestamp", "");
         this.serverReceivedTime = jsonData.optString("server_received_time", "");
@@ -31,6 +33,11 @@ public class TopStores {
                 JSONObject storeJson = topStoresArray.getJSONObject(i);
                 TopStore store = new TopStore(storeJson);
                 this.topStores.add(store);
+                
+                // 최초 추가 시 storeBrand가 비어있으면 첫 번째 매장의 브랜드로 설정
+                if (this.storeBrand == null || this.storeBrand.isEmpty()) {
+                    this.storeBrand = store.getStoreBrand();
+                }
             }
         }
     }
@@ -38,6 +45,7 @@ public class TopStores {
     public JSONObject toJson() {
         JSONObject json = new JSONObject();
         json.put("id", id);
+        json.put("franchise_id", franchiseId);
         json.put("store_brand", storeBrand);
         json.put("timestamp", timestamp);
         json.put("server_received_time", serverReceivedTime);
@@ -58,6 +66,14 @@ public class TopStores {
 
     public void setId(String id) {
         this.id = id;
+    }
+    
+    public int getFranchiseId() {
+        return franchiseId;
+    }
+    
+    public void setFranchiseId(int franchiseId) {
+        this.franchiseId = franchiseId;
     }
 
     public String getStoreBrand() {
@@ -107,8 +123,10 @@ public class TopStores {
     public static class TopStore {
         private String storeId;
         private String storeName;
-        private double salesAmount;
-        private int transactionCount;
+        private String storeBrand;
+        private String storeAddress;
+        private double totalSales;
+        private int rank;
         
         public TopStore() {
         }
@@ -116,16 +134,20 @@ public class TopStores {
         public TopStore(JSONObject jsonData) {
             this.storeId = jsonData.optString("store_id", "");
             this.storeName = jsonData.optString("store_name", "");
-            this.salesAmount = jsonData.optDouble("sales_amount", 0.0);
-            this.transactionCount = jsonData.optInt("transaction_count", 0);
+            this.storeBrand = jsonData.optString("store_brand", "");
+            this.storeAddress = jsonData.optString("store_address", "");
+            this.totalSales = jsonData.optDouble("total_sales", 0.0);
+            this.rank = jsonData.optInt("rank", 0);
         }
         
         public JSONObject toJson() {
             JSONObject json = new JSONObject();
             json.put("store_id", storeId);
             json.put("store_name", storeName);
-            json.put("sales_amount", salesAmount);
-            json.put("transaction_count", transactionCount);
+            json.put("store_brand", storeBrand);
+            json.put("store_address", storeAddress);
+            json.put("total_sales", totalSales);
+            json.put("rank", rank);
             return json;
         }
 
@@ -144,21 +166,37 @@ public class TopStores {
         public void setStoreName(String storeName) {
             this.storeName = storeName;
         }
-
-        public double getSalesAmount() {
-            return salesAmount;
+        
+        public String getStoreBrand() {
+            return storeBrand;
+        }
+        
+        public void setStoreBrand(String storeBrand) {
+            this.storeBrand = storeBrand;
+        }
+        
+        public String getStoreAddress() {
+            return storeAddress;
+        }
+        
+        public void setStoreAddress(String storeAddress) {
+            this.storeAddress = storeAddress;
         }
 
-        public void setSalesAmount(double salesAmount) {
-            this.salesAmount = salesAmount;
+        public double getTotalSales() {
+            return totalSales;
         }
 
-        public int getTransactionCount() {
-            return transactionCount;
+        public void setTotalSales(double totalSales) {
+            this.totalSales = totalSales;
         }
-
-        public void setTransactionCount(int transactionCount) {
-            this.transactionCount = transactionCount;
+        
+        public int getRank() {
+            return rank;
+        }
+        
+        public void setRank(int rank) {
+            this.rank = rank;
         }
     }
 }

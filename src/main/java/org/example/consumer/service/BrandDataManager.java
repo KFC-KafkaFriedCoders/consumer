@@ -43,98 +43,146 @@ public class BrandDataManager implements BrandDataService {
     // 결제 한도 데이터 추가
     @Async("taskExecutor")
     public void addPaymentLimitData(JSONObject data) {
-        String brand = data.optString("store_brand", "");
-        if (brands.contains(brand)) {
-            LinkedList<JSONObject> brandData = paymentLimitData.get(brand);
-            synchronized (brandData) {
-                brandData.addFirst(data);
-                // 최대 개수 초과 시 오래된 데이터 제거
-                while (brandData.size() > maxMessagesPerBrand) {
-                    brandData.removeLast();
-                }
+        try {
+            if (data == null) {
+                log.warn("결제 한도 데이터가 null입니다.");
+                return;
             }
-            log.debug("결제 한도 데이터 추가 - 브랜드: {}, 현재 개수: {}", brand, brandData.size());
-        } else {
-            log.warn("알 수 없는 브랜드의 결제 한도 데이터: '{}'", brand);
+            
+            String brand = data.optString("store_brand", "");
+            if (brands.contains(brand)) {
+                LinkedList<JSONObject> brandData = paymentLimitData.get(brand);
+                synchronized (brandData) {
+                    brandData.addFirst(data);
+                    // 최대 개수 초과 시 오래된 데이터 제거
+                    while (brandData.size() > maxMessagesPerBrand) {
+                        brandData.removeLast();
+                    }
+                }
+                log.debug("결제 한도 데이터 추가 - 브랜드: {}, 현재 개수: {}", brand, brandData.size());
+            } else {
+                log.warn("알 수 없는 브랜드의 결제 한도 데이터: '{}'", brand);
+            }
+        } catch (Exception e) {
+            log.error("결제 한도 데이터 추가 중 오류: {}", e.getMessage());
         }
     }
     
     // 동일인 결제 데이터 추가
     @Async("taskExecutor")
     public void addSameUserData(JSONObject data) {
-        String brand = data.optString("store_brand", "");
-        if (brands.contains(brand)) {
-            LinkedList<JSONObject> brandData = sameUserData.get(brand);
-            synchronized (brandData) {
-                brandData.addFirst(data);
-                // 최대 개수 초과 시 오래된 데이터 제거
-                while (brandData.size() > maxMessagesPerBrand) {
-                    brandData.removeLast();
-                }
+        try {
+            if (data == null) {
+                log.warn("동일인 결제 데이터가 null입니다.");
+                return;
             }
-            log.debug("동일인 결제 데이터 추가 - 브랜드: {}, 현재 개수: {}", brand, brandData.size());
-        } else {
-            log.warn("알 수 없는 브랜드의 동일인 결제 데이터: '{}'", brand);
+            
+            String brand = data.optString("store_brand", "");
+            if (brands.contains(brand)) {
+                LinkedList<JSONObject> brandData = sameUserData.get(brand);
+                synchronized (brandData) {
+                    brandData.addFirst(data);
+                    // 최대 개수 초과 시 오래된 데이터 제거
+                    while (brandData.size() > maxMessagesPerBrand) {
+                        brandData.removeLast();
+                    }
+                }
+                log.debug("동일인 결제 데이터 추가 - 브랜드: {}, 현재 개수: {}", brand, brandData.size());
+            } else {
+                log.warn("알 수 없는 브랜드의 동일인 결제 데이터: '{}'", brand);
+            }
+        } catch (Exception e) {
+            log.error("동일인 결제 데이터 추가 중 오류: {}", e.getMessage());
         }
     }
     
     // 매출 총합 데이터 업데이트
     @Async("taskExecutor")
     public void updateSalesTotalData(JSONObject data) {
-        String brand = data.optString("store_brand", "");
-        if (brands.contains(brand)) {
-            salesTotalData.put(brand, data);
-            log.debug("매출 총합 데이터 업데이트 - 브랜드: {}", brand);
-        } else {
-            log.warn("알 수 없는 브랜드의 매출 총합 데이터: '{}'", brand);
+        try {
+            if (data == null) {
+                log.warn("매출 총합 데이터가 null입니다.");
+                return;
+            }
+            
+            String brand = data.optString("store_brand", "");
+            if (brands.contains(brand)) {
+                salesTotalData.put(brand, data);
+                log.debug("매출 총합 데이터 업데이트 - 브랜드: {}", brand);
+            } else {
+                log.warn("알 수 없는 브랜드의 매출 총합 데이터: '{}'", brand);
+            }
+        } catch (Exception e) {
+            log.error("매출 총합 데이터 업데이트 중 오류: {}", e.getMessage());
         }
     }
     
     // Top Stores 데이터 업데이트 (브랜드 추출 로직 개선)
     @Async("taskExecutor")
     public void updateTopStoresData(JSONObject data) {
-        String extractedBrand = extractBrandFromTopStores(data);
-        
-        if (extractedBrand != null && brands.contains(extractedBrand)) {
-            // 데이터에 브랜드 정보 추가
-            data.put("store_brand", extractedBrand);
-            topStoresData.put(extractedBrand, data);
-            log.debug("Top Stores 데이터 업데이트 - 브랜드: {}", extractedBrand);
-        } else {
-            log.warn("알 수 없는 브랜드의 Top Stores 데이터: '{}'", extractedBrand);
+        try {
+            if (data == null) {
+                log.warn("Top Stores 데이터가 null입니다.");
+                return;
+            }
+            
+            // top_stores 배열 확인
+            if (!data.has("top_stores") || data.getJSONArray("top_stores").length() == 0) {
+                log.warn("Top Stores 데이터에 유효한 top_stores 배열이 없습니다.");
+                return;
+            }
+            
+            String extractedBrand = extractBrandFromTopStores(data);
+            
+            if (extractedBrand != null && brands.contains(extractedBrand)) {
+                // 데이터에 브랜드 정보 추가
+                data.put("store_brand", extractedBrand);
+                topStoresData.put(extractedBrand, data);
+                log.debug("Top Stores 데이터 업데이트 - 브랜드: {}", extractedBrand);
+            } else {
+                log.warn("알 수 없는 브랜드의 Top Stores 데이터: '{}'", extractedBrand);
+            }
+        } catch (Exception e) {
+            log.error("Top Stores 데이터 업데이트 중 오류: {}", e.getMessage());
+            e.printStackTrace();
         }
     }
     
     // Top Stores 데이터에서 브랜드 추출
     private String extractBrandFromTopStores(JSONObject data) {
-        // 1. 직접 store_brand 필드 확인
-        String brand = data.optString("store_brand", "");
-        if (!brand.isEmpty() && !brand.equals("Unknown")) {
-            return brand;
-        }
-        
-        // 2. top_stores 배열에서 첫 번째 매장의 브랜드 추출
-        if (data.has("top_stores")) {
-            JSONArray topStores = data.getJSONArray("top_stores");
-            if (topStores.length() > 0) {
-                JSONObject firstStore = topStores.getJSONObject(0);
-                brand = firstStore.optString("store_brand", "");
-                if (!brand.isEmpty()) {
-                    return brand;
+        try {
+            // 1. 직접 store_brand 필드 확인
+            String brand = data.optString("store_brand", "");
+            if (!brand.isEmpty() && !brand.equals("Unknown")) {
+                return brand;
+            }
+            
+            // 2. top_stores 배열에서 첫 번째 매장의 브랜드 추출
+            if (data.has("top_stores")) {
+                JSONArray topStores = data.getJSONArray("top_stores");
+                if (topStores.length() > 0) {
+                    JSONObject firstStore = topStores.getJSONObject(0);
+                    brand = firstStore.optString("store_brand", "");
+                    if (!brand.isEmpty()) {
+                        return brand;
+                    }
                 }
             }
-        }
-        
-        // 3. franchise_id를 통한 브랜드 매핑 시도 (향후 확장 가능)
-        if (data.has("franchise_id")) {
-            int franchiseId = data.getInt("franchise_id");
-            String mappedBrand = mapFranchiseIdToBrand(franchiseId);
-            if (mappedBrand != null) {
-                return mappedBrand;
+            
+            // 3. franchise_id를 통한 브랜드 매핑 시도 (향후 확장 가능)
+            if (data.has("franchise_id")) {
+                int franchiseId = data.getInt("franchise_id");
+                String mappedBrand = mapFranchiseIdToBrand(franchiseId);
+                if (mappedBrand != null) {
+                    return mappedBrand;
+                }
             }
+            
+            return null;
+        } catch (Exception e) {
+            log.error("브랜드 추출 중 오류: {}", e.getMessage());
+            return null;
         }
-        
-        return null;
     }
     
     // franchise_id와 브랜드 매핑 (향후 확장 가능)
