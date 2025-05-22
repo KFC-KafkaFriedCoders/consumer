@@ -13,13 +13,13 @@ import java.util.concurrent.ThreadPoolExecutor;
 @EnableAsync(proxyTargetClass=true)
 public class AsyncConfig {
     
-    @Value("${app.async.core-pool-size:20}")
+    @Value("${app.async.core-pool-size:25}")
     private int corePoolSize;
     
     @Value("${app.async.max-pool-size:100}")
     private int maxPoolSize;
     
-    @Value("${app.async.queue-capacity:1000}")
+    @Value("${app.async.queue-capacity:2500}")
     private int queueCapacity;
     
     @Value("${app.async.thread-name-prefix:async-task-}")
@@ -46,12 +46,13 @@ public class AsyncConfig {
     @Bean(name = "salesMinuteExecutor")
     public Executor salesMinuteExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(10);
+        executor.setCorePoolSize(15);
         executor.setMaxPoolSize(50);
-        executor.setQueueCapacity(500);
+        executor.setQueueCapacity(5000);
         executor.setThreadNamePrefix("sales-minute-");
-        executor.setKeepAliveSeconds(30);
+        executor.setKeepAliveSeconds(60);
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.initialize();
         return executor;
     }

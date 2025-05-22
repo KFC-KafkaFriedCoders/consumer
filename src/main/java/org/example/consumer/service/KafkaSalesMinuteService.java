@@ -19,11 +19,11 @@ import java.time.Duration;
 import java.util.Collections;
 import java.util.Properties;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -41,16 +41,16 @@ public class KafkaSalesMinuteService {
     @Value("${app.performance.enable-backpressure:true}")
     private boolean enableBackpressure;
     
-    @Value("${app.performance.max-pending-tasks:5000}")
+    @Value("${app.performance.max-pending-tasks:25000}")
     private int maxPendingTasks;
     
     private KafkaConsumer<String, String> consumer;
     private ExecutorService executorService;
     private final AtomicBoolean running = new AtomicBoolean(true);
     private final AtomicLong processedMessages = new AtomicLong(0);
-    private final AtomicLong droppedMessages = new AtomicLong(0);
+    private final AtomicLong totalMessages = new AtomicLong(0);
     
-    private final BlockingQueue<JSONObject> messageQueue = new LinkedBlockingQueue<>(10000);
+    private final BlockingQueue<JSONObject> messageQueue = new LinkedBlockingQueue<>(25000);
 
     @Autowired
     public KafkaSalesMinuteService(
@@ -72,46 +72,57 @@ public class KafkaSalesMinuteService {
         properties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
         properties.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true");
         properties.put(ConsumerConfig.AUTO_COMMIT_INTERVAL_MS_CONFIG, "1000");
-        properties.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "100");
-        properties.put(ConsumerConfig.FETCH_MIN_BYTES_CONFIG, "1024");
+        properties.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, "2500");
+        properties.put(ConsumerConfig.FETCH_MIN_BYTES_CONFIG, "524288");
+        properties.put(ConsumerConfig.FETCH_MAX_BYTES_CONFIG, "26214400");
+        properties.put(ConsumerConfig.MAX_PARTITION_FETCH_BYTES_CONFIG, "5242880");
+        properties.put(ConsumerConfig.FETCH_MAX_WAIT_MS_CONFIG, "100");
+        properties.put(ConsumerConfig.RECEIVE_BUFFER_CONFIG, "524288");
+        properties.put(ConsumerConfig.SEND_BUFFER_CONFIG, "524288");
+        properties.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, "15000");
+        properties.put(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, "5000");
 
         consumer = new KafkaConsumer<>(properties);
         consumer.subscribe(Collections.singletonList(TOPIC));
 
-        System.out.println("SalesMinuteService 시작됨 - 토픽: " + TOPIC);
+        System.out.println("🚀 고성능 SalesMinuteService 시작됨 - 토픽: " + TOPIC);
 
-        executorService = Executors.newFixedThreadPool(3);
+        executorService = Executors.newFixedThreadPool(4);
         executorService.submit(this::pollMessages);
-        executorService.submit(this::processMessages);
+        
+        for (int i = 0; i < 2; i++) {
+            executorService.submit(this::processMessages);
+        }
+        
         executorService.submit(this::printStats);
     }
 
     private void pollMessages() {
         try {
             while (running.get()) {
-                ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(100));
+                ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(50));
 
                 for (ConsumerRecord<String, String> record : records) {
                     try {
-                        String jsonValue = record.value();
-                        JSONObject jsonObject = new JSONObject(jsonValue);
+                        JSONObject jsonObject = new JSONObject(record.value());
+                        totalMessages.incrementAndGet();
                         
                         if (enableBackpressure && messageQueue.size() > maxPendingTasks) {
-                            droppedMessages.incrementAndGet();
+                            System.out.println("⚠️ Backpressure: 메시지 드롭됨");
                             continue;
                         }
                         
                         if (!messageQueue.offer(jsonObject)) {
-                            droppedMessages.incrementAndGet();
+                            System.out.println("⚠️ Queue full: 메시지 드롭됨");
                         }
                         
                     } catch (Exception e) {
-                        System.err.println("SalesMinute JSON 파싱 오류: " + e.getMessage());
+                        System.err.println("JSON 파싱 오류: " + e.getMessage());
                     }
                 }
             }
         } catch (Exception e) {
-            System.err.println("SalesMinute 메시지 폴링 중 오류: " + e.getMessage());
+            System.err.println("메시지 폴링 중 오류: " + e.getMessage());
         } finally {
             if (consumer != null) {
                 consumer.close();
@@ -127,7 +138,7 @@ public class KafkaSalesMinuteService {
                     processMessageAsync(message);
                     processedMessages.incrementAndGet();
                 } else {
-                    Thread.sleep(10);
+                    Thread.sleep(5);
                 }
             }
         } catch (Exception e) {
@@ -135,35 +146,44 @@ public class KafkaSalesMinuteService {
         }
     }
 
-    @Async("salesMinuteExecutor")
-    public void processMessageAsync(JSONObject jsonObject) {
-        try {
-            String brand = jsonObject.optString("store_brand", "");
-            if (brandDataManager.isValidBrand(brand)) {
-                brandDataManager.updateSalesMinuteData(jsonObject);
-                webSocketService.sendSalesMinute(jsonObject);
+    private void processMessageAsync(JSONObject jsonObject) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                String brand = jsonObject.optString("store_brand", "");
+                if (brandDataManager.isValidBrand(brand)) {
+                    brandDataManager.updateSalesMinuteData(jsonObject);
+                }
+            } catch (Exception e) {
+                System.err.println("BrandData 처리 오류: " + e.getMessage());
             }
-        } catch (Exception e) {
-            System.err.println("비동기 메시지 처리 오류: " + e.getMessage());
-        }
+        }, salesMinuteExecutor);
+
+        CompletableFuture.runAsync(() -> {
+            try {
+                webSocketService.sendSalesMinute(jsonObject);
+            } catch (Exception e) {
+                System.err.println("WebSocket 전송 오류: " + e.getMessage());
+            }
+        }, salesMinuteExecutor);
     }
 
     private void printStats() {
         try {
+            long lastProcessed = 0;
             while (running.get()) {
-                Thread.sleep(30000);
+                Thread.sleep(15000);
                 
-                long processed = processedMessages.get();
-                long dropped = droppedMessages.get();
+                long currentProcessed = processedMessages.get();
+                long currentTotal = totalMessages.get();
+                long throughput = (currentProcessed - lastProcessed);
                 int queueSize = messageQueue.size();
                 
-                if (processed > 0 || dropped > 0) {
-                    System.out.println(String.format(
-                        "SalesMinute Stats - Processed: %d, Dropped: %d, Queue: %d, Success Rate: %.2f%%",
-                        processed, dropped, queueSize, 
-                        (double) processed / (processed + dropped) * 100
-                    ));
-                }
+                System.out.println(String.format(
+                    "📊 SalesMinute Stats - 처리량: %d/15s (%d/sec) | 큐: %d | 총: %d",
+                    throughput, throughput / 15, queueSize, currentTotal
+                ));
+                
+                lastProcessed = currentProcessed;
             }
         } catch (Exception e) {
             System.err.println("통계 출력 중 오류: " + e.getMessage());
@@ -179,6 +199,6 @@ public class KafkaSalesMinuteService {
         if (consumer != null) {
             consumer.close();
         }
-        System.out.println("KafkaSalesMinuteService 중지됨");
+        System.out.println("📊 SalesMinuteService 중지됨");
     }
 }

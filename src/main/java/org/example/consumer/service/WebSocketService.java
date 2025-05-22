@@ -274,6 +274,7 @@ public class WebSocketService implements WebSocketNotificationService {
     public void sendSalesMinuteSync(JSONObject salesMinuteData) {
         try {
             if (salesMinuteData == null) {
+                log.warn("분별 매출 데이터가 null입니다.");
                 return;
             }
             
@@ -283,12 +284,12 @@ public class WebSocketService implements WebSocketNotificationService {
             safeData.put("store_count", salesMinuteData.opt("store_count"));
             safeData.put("total_sales", salesMinuteData.opt("total_sales"));
             safeData.put("update_time", salesMinuteData.opt("update_time"));
-            
             safeData.put("server_received_time", LocalDateTime.now().format(formatter));
             safeData.put("event_type", "sales_minute_update");
             safeData.put("id", System.currentTimeMillis() + "-" + Thread.currentThread().getId());
             
             messagingTemplate.convertAndSend("/topic/sales-minute", safeData.toString());
+            log.debug("분별 매출 데이터 전송: {}", safeData.optString("store_brand", "unknown"));
         } catch (Exception e) {
             log.error("분별 매출 데이터 전송 중 오류: {}", e.getMessage());
         }

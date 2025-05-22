@@ -23,7 +23,7 @@ app:
   brands:
     names: 빽다방,한신포차,돌배기집,롤링파스타,리춘시장,막이오름,미정국수,미정국수0410,백스비어,백철판0410,본가,빽보이피자,새마을식당,성성식당,역전우동0410,연돈볼카츠,원조쌈밥집,인생설렁탕,제순식당,홍콩반점0410,홍콩분식,고투웍,대한국밥
   data:
-    max-messages-per-brand: 20
+    max-messages-per-brand: 30
     date-format: yyyy-MM-dd HH:mm:ss
   websocket:
     allowed-origins: "*"
@@ -32,9 +32,9 @@ app:
     app-destination-prefix: /app
     user-destination-prefix: /user
   async:
-    core-pool-size: 20
+    core-pool-size: 25
     max-pool-size: 100
-    queue-capacity: 1000
+    queue-capacity: 2500
     thread-name-prefix: async-task-
     keep-alive-seconds: 60
   batch:
@@ -42,5 +42,5 @@ app:
     max-batch-size: 50
   performance:
     enable-backpressure: true
-    max-pending-tasks: 5000
-    circuit-breaker-threshold: 100
+    max-pending-tasks: 25000
+    circuit-breaker-threshold: 500
