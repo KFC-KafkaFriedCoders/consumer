@@ -121,6 +121,7 @@ public class KafkaSalesTotalService {
     // 로깅을 위한 헬퍼 메서드
     private void logSalesData(JSONObject jsonObject) {
         try {
+            /*
             if (jsonObject.has("franchise_id")) {
                 System.out.println("가맹점 ID: " + jsonObject.getInt("franchise_id"));
             }
@@ -135,7 +136,7 @@ public class KafkaSalesTotalService {
             }
             if (jsonObject.has("update_time")) {
                 System.out.println("업데이트 시간: " + jsonObject.getString("update_time"));
-            }
+            }*/
         } catch (Exception e) {
             System.err.println("로깅 중 오류: " + e.getMessage());
         }
