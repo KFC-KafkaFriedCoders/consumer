@@ -6,7 +6,7 @@ spring:
   task:
     scheduling:
       pool:
-        size: 5
+        size: 10
 
 server:
   port: 8080
@@ -32,10 +32,15 @@ app:
     app-destination-prefix: /app
     user-destination-prefix: /user
   async:
-    core-pool-size: 5
-    max-pool-size: 10
-    queue-capacity: 25
+    core-pool-size: 20
+    max-pool-size: 100
+    queue-capacity: 1000
     thread-name-prefix: async-task-
+    keep-alive-seconds: 60
   batch:
-    flush-interval-ms: 2000
-    max-batch-size: 100
+    flush-interval-ms: 1000
+    max-batch-size: 50
+  performance:
+    enable-backpressure: true
+    max-pending-tasks: 5000
+    circuit-breaker-threshold: 100
