@@ -25,7 +25,7 @@ public class KafkaTopStoresService {
 
     // Kafka 설정
     private static final String BOOTSTRAP_SERVERS = "13.209.157.53:9092,15.164.111.153:9092,3.34.32.69:9092";
-    private static final String TOPIC = "franchise-top-stores-new";
+    private static final String TOPIC = "franchise-top-stores";
     private static final String GROUP_ID = "top-stores-consumer-group";
 
     private final WebSocketService webSocketService;
