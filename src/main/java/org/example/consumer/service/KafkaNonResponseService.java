@@ -72,7 +72,8 @@ public class KafkaNonResponseService {
                         JSONObject jsonObject = new JSONObject(jsonValue);
 
                         System.out.println("------------------------------------");
-                        System.out.println("비응답 매장 데이터 수신: " + jsonObject.toString());
+                        System.out.println("비응답 매장 데이터 수신");
+                        //System.out.println("비응답 매장 데이터 수신: " + jsonObject.toString());
 
                         webSocketService.sendNonResponseData(jsonObject);
                         

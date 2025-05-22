@@ -82,7 +82,7 @@ public class KafkaSalesTotalService {
 
                         // 콘솔에 로그 출력
                         System.out.println("------------------------------------");
-                        System.out.println("매출 총합 데이터 수신: " + jsonObject.toString());
+                        System.out.println("매출 총합 데이터 수신" );
                         
                         // 브랜드 정보 로깅
                         String brand = jsonObject.optString("store_brand", "Unknown");

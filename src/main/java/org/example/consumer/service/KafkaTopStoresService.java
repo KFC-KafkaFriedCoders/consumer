@@ -81,11 +81,11 @@ public class KafkaTopStoresService {
                         String jsonValue = record.value();
                         
                         // 추가 디버그: 원본 JSON 로깅
-                        System.out.println("받은 원본 JSON: " + jsonValue);
+                        //System.out.println("받은 원본 JSON: " + jsonValue);
                         
                         // 유효성 체크
                         if (jsonValue == null || jsonValue.trim().isEmpty()) {
-                            System.err.println("빈 JSON 문자열이 수신되었습니다. 처리를 건너뜁니다.");
+                            //System.err.println("빈 JSON 문자열이 수신되었습니다. 처리를 건너뜁니다.");
                             continue;
                         }
                         
@@ -99,17 +99,17 @@ public class KafkaTopStoresService {
                         
                         // 유효성 검사 추가
                         if (!jsonObject.has("top_stores")) {
-                            System.err.println("수신된 JSON에 top_stores 배열이 없습니다. 처리를 건너뜁니다.");
+                            // System.err.println("수신된 JSON에 top_stores 배열이 없습니다. 처리를 건너뜁니다.");
                             continue;
                         }
                         
                         if (jsonObject.getJSONArray("top_stores").length() == 0) {
-                            System.err.println("수신된 JSON에 top_stores 배열이 비어 있습니다. 처리를 건너뜁니다.");
+                            // System.err.println("수신된 JSON에 top_stores 배열이 비어 있습니다. 처리를 건너뜁니다.");
                             continue;
                         }
                         
                         if (!jsonObject.getJSONArray("top_stores").getJSONObject(0).has("store_brand")) {
-                            System.err.println("첫 번째 매장에 store_brand 필드가 없습니다. 처리를 건너뜁니다.");
+                            // System.err.println("첫 번째 매장에 store_brand 필드가 없습니다. 처리를 건너뜁니다.");
                             continue;
                         }
                         
@@ -201,7 +201,7 @@ public class KafkaTopStoresService {
             }
             
             // 원본 값을 출력할 때는 더 이상 로깅 오류를 발생시키지 않음
-            System.out.println("원본 값: " + jsonObject.toString());
+            // System.out.println("원본 값: " + jsonObject.toString());
         } catch (Exception e) {
             System.err.println("로깅 중 오류: " + e.getMessage());
         }

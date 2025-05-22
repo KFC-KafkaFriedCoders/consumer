@@ -78,7 +78,7 @@ public class KafkaPaymentLimitService {
 
                         // 콘솔에 로그 출력
                         System.out.println("------------------------------------");
-                        System.out.println("결제 한도 알림 수신: " + jsonObject.toString());
+                        System.out.println("결제 한도 알림 수신");
 
                         // WebSocket을 통해 클라이언트에게 메시지 전송 (브랜드별 저장 포함)
                         webSocketService.sendPaymentLimitAlert(jsonObject);
