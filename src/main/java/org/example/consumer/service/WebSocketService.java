@@ -267,6 +267,37 @@ public class WebSocketService implements WebSocketNotificationService {
     }
 
     @Async("taskExecutor")
+    public void sendSalesMinute(JSONObject salesMinuteData) {
+        sendSalesMinuteSync(salesMinuteData);
+    }
+
+    public void sendSalesMinuteSync(JSONObject salesMinuteData) {
+        try {
+            if (salesMinuteData == null) {
+                log.warn("분별 매출 데이터가 null입니다.");
+                return;
+            }
+            
+            JSONObject safeData = new JSONObject();
+            for (String key : salesMinuteData.keySet()) {
+                safeData.put(key, salesMinuteData.get(key));
+            }
+            
+            safeData.put("server_received_time", LocalDateTime.now().format(formatter));
+            safeData.put("event_type", "sales_minute_update");
+            
+            if (!safeData.has("id")) {
+                safeData.put("id", System.currentTimeMillis() + "-" + Math.random());
+            }
+            
+            messagingTemplate.convertAndSend("/topic/sales-minute", safeData.toString());
+            log.debug("분별 매출 데이터 전송: {}", safeData.optString("store_brand", "unknown"));
+        } catch (Exception e) {
+            log.error("분별 매출 데이터 전송 중 오류: {}", e.getMessage());
+        }
+    }
+
+    @Async("taskExecutor")
     public void sendBrandPaymentLimitData(String brand, String sessionId) {
         // 이 메서드는 더 이상 BrandManager에 직접 의존하지 않음
         // 대신 필요한 데이터는 이 서비스로 전달되어야 함

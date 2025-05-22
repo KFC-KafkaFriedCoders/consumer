@@ -26,6 +26,7 @@ public class BrandDataManager implements BrandDataService {
     private final Map<String, LinkedList<JSONObject>> sameUserData = new ConcurrentHashMap<>();
     private final Map<String, JSONObject> salesTotalData = new ConcurrentHashMap<>();
     private final Map<String, JSONObject> topStoresData = new ConcurrentHashMap<>();
+    private final Map<String, JSONObject> salesMinuteData = new ConcurrentHashMap<>();
     
     @Autowired
     public BrandDataManager(BrandProperties brandProperties, DataProperties dataProperties) {
@@ -114,6 +115,32 @@ public class BrandDataManager implements BrandDataService {
             }
         } catch (Exception e) {
             log.error("매출 총합 데이터 업데이트 중 오류: {}", e.getMessage());
+        }
+    }
+    
+    // 분별 매출 데이터 업데이트 (비동기)
+    @Async("taskExecutor")
+    public void updateSalesMinuteData(JSONObject data) {
+        updateSalesMinuteDataSync(data);
+    }
+    
+    // 분별 매출 데이터 업데이트 (동기)
+    public void updateSalesMinuteDataSync(JSONObject data) {
+        try {
+            if (data == null) {
+                log.warn("분별 매출 데이터가 null입니다.");
+                return;
+            }
+            
+            String brand = data.optString("store_brand", "");
+            if (brands.contains(brand)) {
+                salesMinuteData.put(brand, data);
+                log.debug("분별 매출 데이터 업데이트 - 브랜드: {}", brand);
+            } else {
+                log.warn("알 수 없는 브랜드의 분별 매출 데이터: '{}'", brand);
+            }
+        } catch (Exception e) {
+            log.error("분별 매출 데이터 업데이트 중 오류: {}", e.getMessage());
         }
     }
     
@@ -219,6 +246,11 @@ public class BrandDataManager implements BrandDataService {
         return salesTotalData.get(brand);
     }
     
+    // 브랜드별 분별 매출 데이터 조회
+    public JSONObject getSalesMinuteData(String brand) {
+        return salesMinuteData.get(brand);
+    }
+    
     // 브랜드별 Top Stores 데이터 조회
     public JSONObject getTopStoresData(String brand) {
         return topStoresData.get(brand);
@@ -242,10 +274,11 @@ public class BrandDataManager implements BrandDataService {
             int sameUserCount = sameUserData.get(brand).size();
             boolean hasSalesTotal = salesTotalData.containsKey(brand);
             boolean hasTopStores = topStoresData.containsKey(brand);
+            boolean hasSalesMinute = salesMinuteData.containsKey(brand);
             
-            status.append(String.format("브랜드: %s | 결제한도: %d개 | 동일인: %d개 | 매출총합: %s | Top매장: %s\n", 
+            status.append(String.format("브랜드: %s | 결제한도: %d개 | 동일인: %d개 | 매출총합: %s | Top매장: %s | 분별매출: %s\n", 
                 brand, paymentLimitCount, sameUserCount, 
-                hasSalesTotal ? "있음" : "없음", hasTopStores ? "있음" : "없음"));
+                hasSalesTotal ? "있음" : "없음", hasTopStores ? "있음" : "없음", hasSalesMinute ? "있음" : "없음"));
         }
         status.append("================================");
         log.info(status.toString());
@@ -259,6 +292,7 @@ public class BrandDataManager implements BrandDataService {
             sameUserData.get(brand).clear();
             salesTotalData.remove(brand);
             topStoresData.remove(brand);
+            salesMinuteData.remove(brand);
             log.info("브랜드 데이터 삭제 완료: {}", brand);
         }
     }
